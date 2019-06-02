@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__all__=['ERROR_MSG', 'CapybaraMailError', 'AccessDeniedError']
+__all__=['ERROR_MSG', 'CapybaraMailError', 'AccessDeniedError', 'StoreError']
 
 ERROR_MSG={
    # USER
@@ -31,3 +31,6 @@ class CapybaraMailError(Exception):
 class AccessDeniedError(CapybaraMailError):
    def __init__(self, msg=None):
       super(AccessDeniedError, self).__init__(code=-3, msg=msg)
+
+class StoreError(CapybaraMailError):
+   pass
