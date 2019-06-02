@@ -54,25 +54,11 @@ class StoreBase(object):
          self.db.configureNS(SCHEME, andClear=True)
 
    @staticmethod
-   def userId(name):
-      if isinstance(name, str):
-         if name.startswith('user#'): return name
+   def userId(user):
+      if isinstance(user, str):
+         if user.startswith('user#'): return user
          else:
-            return 'user#%s'%name
-      raise ValueError('Incorrect type')
-
-   @staticmethod
-   def contactlistId(index):
-      if isinstance(index, str) and index.startswith('contactlist#'): return index
-      elif isinstance(index, int):
-         return 'contactlist#%s'%index
-      raise ValueError('Incorrect type')
-
-   @staticmethod
-   def contactId(index):
-      if isinstance(index, str) and index.startswith('contact#'): return index
-      elif isinstance(index, int):
-         return 'contact#%s'%index
+            return 'user#%s'%user
       raise ValueError('Incorrect type')
 
    @staticmethod
@@ -83,13 +69,21 @@ class StoreBase(object):
       raise ValueError('Incorrect type')
 
    @staticmethod
+   def emailId(email):
+      if isinstance(email, str):
+         if email.startswith('email#'): return email
+         else:
+            return 'email#%s'%email
+      raise ValueError('Incorrect type')
+
+   @staticmethod
    def dialogId(index):
       if isinstance(index, str) and index.startswith('dialog#'): return index
       elif isinstance(index, int):
          return 'dialog#%s'%index
       raise ValueError('Incorrect type')
 
-   def userAdd(self, user, password, descr=None, avatar=None):
+   def userAdd(self, user, password, descr=None, avatar=None, strictMode=True):
       assert isStr(password) and password
       userId=self.userId(user)
       if self.db.isExist(userId):
@@ -103,80 +97,35 @@ class StoreBase(object):
          'descr':descr,
          'avatar':avatar,
       }
-      try:
-         self.db.set(userId, data, strictMode=True, onlyIfExist=False)
-         self.db.set((userId, 'node_label'), False, strictMode=True, onlyIfExist=False)
-         self.db.set((userId, 'node_date'), False, strictMode=True, onlyIfExist=False)
-         self.db.set((userId, 'node_contactlist'), False, strictMode=True, onlyIfExist=False)
-         self.db.set((userId, 'node_shared_user'), False, strictMode=True, onlyIfExist=False)
-         self.contactlistAdd(userId, 'ALL', contactlist=0)
-         self.contactAdd(userId, 0, 'SELF', contact=0)
-      except dbError.ExistStatusMismatchError:
-         raise StoreError(-101)
-      return userId
+      self.db.set(userId, data, strictMode=strictMode, onlyIfExist=False)
+      self.db.set((userId, 'node_date'), False, strictMode=False, onlyIfExist=False)
+      self.db.set((userId, 'node_email'), False, strictMode=False, onlyIfExist=False)
+      self.db.set((userId, 'node_label'), False, strictMode=False, onlyIfExist=False)
+      return (userId,)
 
-   def contactlistAdd(self, user, name, descr=None, color=None, contactlist=NULL):
-      userId=self.userId(user)
-      _suf='+' if contactlist is NULL else ('#%i'%contactlist)
-      contactlistId=self.db.set((userId, 'node_contactlist', 'contactlist'+_suf), {
-         'name':name,
-         'descr':descr,
-         'color':color,
-      }, strictMode=True)[-1]
-      return contactlistId
-
-   def contactAdd(self, user, contactlist, nameFirst, nameSecond=None, avatar=None, note=None, contact=NULL):
-      userId=self.userId(user)
-      contactlistId=self.contactlistId(contactlist)
-      _suf='+' if contact is NULL else ('#%i'%contact)
-      contactId=self.db.set((userId, 'node_contactlist', contactlistId, 'contact'+_suf), {
-         'nameFirst':'str',
-         'nameSecond':nameSecond,
-         'avatar':avatar,
-         'note':note,
-      }, strictMode=True)[-1]
-      self.db.set((userId, 'node_contactlist', contactlistId, contactId, 'node_msg_in'), False, strictMode=False, onlyIfExist=False)
-      self.db.set((userId, 'node_contactlist', contactlistId, contactId, 'node_msg_out'), False, strictMode=False, onlyIfExist=False)
-      self.db.set((userId, 'node_contactlist', contactlistId, contactId, 'node_field'), False, strictMode=False, onlyIfExist=False)
-      return contactId
-
-   def contactFieldModify(self, user, contactlist, contact, fieldType, value, name=None, desc=None, **additional):
-      if fieldType=='email':
-         fieldId=self.fieldId_email(value)
-         data={
-            'value':value,
-            'name':name,
-            'descr':descr,
-         }
-      else:
-         #! нужна возможность легко расширять поддержку полей через сабклассинг
-         raise ValueError('Unsupported filed type: %s'%fieldType)
-      userId=self.userId(user)
-      contactlistId=self.contactlistId(contactlist)
-      contactId=self.contactId(contact)
-      self.db.set((userId, 'node_contactlist', contactlistId, contactId, 'node_field', fieldId), data, strictMode=True)
-      return fieldId
-
-   def contactFindByField(self):
-      #! пока неясно как это реализовать
-      pass
-
-   def dateAdd(self, user, date):
+   def dateAdd(self, user, date, strictMode=False):
       userId=self.userId(user)
       dateId=self.dateId(date)
-      self.db.set((userId, 'node_date', dateId), False, strictMode=False, onlyIfExist=False)
-      self.db.set((userId, 'node_date', dateId, 'node_msg_in'), False, strictMode=False, onlyIfExist=False)
-      self.db.set((userId, 'node_date', dateId, 'node_msg_out'), False, strictMode=False, onlyIfExist=False)
+      self.db.set((userId, 'node_date', dateId), False, strictMode=strictMode, onlyIfExist=False)
+      self.db.set((userId, 'node_date', dateId, 'node_email'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_date', dateId, 'node_dialog'), False, strictMode=False, onlyIfExist=False)
       return (userId, 'node_date', dateId)
 
-   def dialogAdd(self, user, date):
+   def emailAdd(self, user, email, name=None, strictMode=False):
+      userId=self.userId(user)
+      emailId=self.emailId(email)
+      self.db.set((userId, 'node_email', emailId), False, strictMode=strictMode, onlyIfExist=False)
+      return (userId, 'node_email', emailId)
+
+   def dialogAdd(self, user, date, strictMode=False):
       userId=self.userId(user)
       dateId=self.dateId(date)
-      ids=self.db.set((userId, 'node_date', dateId, 'node_dialog', 'dialog+'), False, strictMode=True)
+      ids=self.db.set((userId, 'node_date', dateId, 'node_dialog', 'dialog+'), False, strictMode=strictMode)
       return ids
 
    def msgAdd(self, user, isIncoming, msg, body, params, raw, label=None, strictMode=True):
+      userId=self.userId(user)
+      _linkTo=[]
       data={
          'subject':params['subject'],
          'timestamp':params['timestamp'],
@@ -184,50 +133,44 @@ class StoreBase(object):
          'raw':raw,
          'body':body,
       }
-      addContacts={}
       #
-      name, val=params['from']
-      data['from']=val
-      addContacts[val]=name
+      dateIds=self.dateAdd(userId, params['timestamp'], strictMode=strictMode)
       #
-      data['to']=[]
-      for name, val in params['to']:
-         addContacts[val]=name
-         data['to'].append(val)
-      data['to']=tuple(data['to'])
+      isFrom=True
+      for k in ('from', 'to', 'cc', 'bcc'):
+         v=params.get(k) or None
+         if isFrom:
+            data[k], v=v, (v,)
+         else:
+            data[k]=tuple(_v[1] for _v in v) if v else None
+         for name, email in v:
+            emailIds=self.emailAdd(user, email, name, strictMode=strictMode)
+            emailIds=self.db.link(
+               dateIds+('node_email', emailIds[-1]),
+               emailIds, strictMode=strictMode, onlyIfExist=False)
+            if isFrom:
+               msgIds=emailIds+(self.msgId(msg),)
+            else:
+               _linkTo.append(emailIds)
+         isFrom=False
       #
-      data['cc']=[]
-      for name, val in params['cc']:
-         addContacts[val]=name
-         data['cc'].append(val)
-      data['cc']=tuple(data['cc'])
-      #
-      data['bcc']=[]
-      for name, val in params['bcc']:
-         addContacts[val]=name
-         data['bcc'].append(val)
-      data['bcc']=tuple(data['bcc'])
+      #! search by `in-reply-to`
+      dialogIds=self.dialogAdd(userId, dateIds[-1])
+      _linkTo.append(dialogIds)
       #
       data['attachments']=None  #! fixme
       #
-      addLabels=[]  #! fixme
+      self.db.set(msgIds, data, strictMode=strictMode, onlyIfExist=False)
+      for ids in _linkTo:
+         self.db.link(
+            ids+(msgIds[-1]),
+            msgIds, strictMode=strictMode, onlyIfExist=False)
       #
-      dialogIds=self.dialogAdd(userId, dateId)  #! search by `in-reply-to`
-      #
-      userId=self.userId(user)
-      dateId=self.dateAdd(userId, params['timestamp'])
-      msgId=self.msgId(msg)
-      target=(userId, 'node_date', dateId, 'node_msg_'%('in' if isIncoming else 'out'), msgId)
-      try:
-         self.db.set(target, data, strictMode=True, onlyIfExist=False)
-         self.db.link(dialogIds+(msgId,), target, strictMode=True, onlyIfExist=False)
-         #
-         addContacts  #! fixme
-         addLabels  #! fixme
-      except dbError.ExistStatusMismatchError:
-         raise  #! fixme
-
-
+      #? большой вопрос - как хранить вложенные лэйблы. подход gmail кажется весьма неплохим
+      # if label:
+      #    toNow=
+      #    for l in label:
+      return msgIds
 
    # def userEdit(self, user, descr=NULL, avatar=NULL):
    #    userId=self.userId(user)
@@ -240,9 +183,6 @@ class StoreBase(object):
    #    except dbError.ExistStatusMismatchError:
    #       raise LogicError(-104)
 
-
-
-
 import mailbox, email
 
 class ImportMBox(object):
@@ -252,14 +192,31 @@ class ImportMBox(object):
    def __init__(self, path):
       self.path=path
       self._headers_preprocess={
-         'from':email.utils.parseaddr,  #! у адресов первая часть тоже может быть закодирована
-         'to':email.utils.parseaddr,
-         'cc':email.utils.parseaddr,
-         'bcc':email.utils.parseaddr,
+         'from':self._parseAddress,
+         'to':self._parseAddress,
+         'cc':self._parseAddress,
+         'bcc':self._parseAddress,
          'date':email.utils.parsedate_tz,
          'subject':self._decodeHeader,
-         'x-gmail-labels':self._decodeHeader,
+         'x-gmail-labels':self._parseLabels,
       }
+
+   @classmethod
+   def _parseAddress(cls, data):
+      print '   >', data, email.utils.parseaddr(data)
+      return tuple(
+         (self._decodeHeader(n), v)
+         for n, v in email.utils.parseaddr(data)
+      )
+
+   @classmethod
+   def _parseLabels(cls, data):
+      return tuple(
+         (tuple(
+            ss.strip() for ss in s.split('/')
+         ) if '/' in s else s.strip())
+         for s in self._decodeHeader(v).split(',')
+      )
 
    @classmethod
    def _decodeText(cls, obj):
