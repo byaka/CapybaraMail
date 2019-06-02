@@ -212,7 +212,7 @@ class StoreBase(object):
       #
       addLabels=[]  #! fixme
       #
-      dialogIds=self.dialogAdd(userId, dateId)  #! search by `references`
+      dialogIds=self.dialogAdd(userId, dateId)  #! search by `in-reply-to`
       #
       userId=self.userId(user)
       dateId=self.dateAdd(userId, params['timestamp'])
