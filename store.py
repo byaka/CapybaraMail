@@ -203,11 +203,8 @@ class ImportMBox(object):
 
    @classmethod
    def _parseAddress(cls, data):
-      print '   >', data, email.utils.parseaddr(data)
-      return tuple(
-         (self._decodeHeader(n), v)
-         for n, v in email.utils.parseaddr(data)
-      )
+      n,v=email.utils.parseaddr(data)
+      return (cls._decodeHeader(n), v)
 
    @classmethod
    def _parseLabels(cls, data):
@@ -215,7 +212,7 @@ class ImportMBox(object):
          (tuple(
             ss.strip() for ss in s.split('/')
          ) if '/' in s else s.strip())
-         for s in self._decodeHeader(v).split(',')
+         for s in cls._decodeHeader(data).split(',')
       )
 
    @classmethod
