@@ -26,14 +26,16 @@ SCHEME=[
 
    ('node_date', ('user', 'date', False, False, False, False, True)),
 
-   ('date', ('node_date', ['node_email', 'node_dialog'], False, True, True, False, None)),
+   ('date', ('node_date', ['node_email', 'node_dialog', 'node_msg'], False, True, True, False, None)),
 
    ('node_dialog', ('date', 'dialog', False, False, False, False, False)),
 
    ('dialog', (['node_dialog'], ['msg'], False, True, True, True, None)),
 
+   ('node_msg', ('date', 'msg', False, False, False, False, True)),
+
    #! ожидает #83 для ограничения вложенности только внутри диалогов
-   ('msg', (['email', 'dialog', 'msg'], ['msg', 'label'], {
+   ('msg', (['node_msg', 'email', 'dialog', 'msg'], ['msg', 'label'], {
       'subject':'str',
       'timestamp':'datetime',
       'isIncoming':'bool',
