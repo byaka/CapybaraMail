@@ -9,18 +9,19 @@ __all__=['SCHEME']
 SCHEME=[
 #  (Name, (Parents, Childs, Columns, AllowOnlyIndexed[True], AllowOnlyNumerable[False], localAutoIncrement[fromSetts], linkChilds[fromSetts])) # noqa
 
-   ('user', (False, ['node_date', 'node_email', 'node_label'], {
+   ('user', (None, ['node_date', 'node_email', 'node_label', 'node_self'], {
       '_passwordHash':'str',
-      '_connector':('list', 'none'),
       'isActive':'bool',
       'name':'str',
       'descr':('str', 'none'),
       'avatar':('str', 'none'),
    }, True, False, False, None)),
 
+   ('node_self', ('user', 'email', False, False, False, False, True)),
+
    ('node_email', ('user', 'email', False, False, False, False, None)),
 
-   ('email', ('node_email', 'msg', {
+   ('email', (('node_email', 'node_self'), 'msg', {
       'name':('str', 'none'),
    }, True, False, False, None)),
 

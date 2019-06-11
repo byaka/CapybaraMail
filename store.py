@@ -153,36 +153,61 @@ class StoreDB(StoreBase):
       assert isStr(password) and password
       userId=self.userId(user)
       if self.db.isExist(userId):
-         raise LogicError(-106)
+         raise StoreError(-106)
       passwordHash=password  #! здесь добавить хеширование
+      #! аватрку нужно записывать в fileStore и оставлять лишь ссылку
       data={
          '_passwordHash':passwordHash,
-         '_connector':None,
          'isActive':True,
          'name':user,
          'descr':descr,
          'avatar':avatar,
       }
-      self.db.set(userId, data, strictMode=strictMode, onlyIfExist=False)
+      ids=(userId,)
+      self.db.set(ids, data, strictMode=strictMode, onlyIfExist=False)
+      self.db.set((userId, 'node_self'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_date'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_email'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_label'), False, strictMode=False, onlyIfExist=False)
-      return (userId,)
+      return ids
+
+   def userIsExist(self, user, needRaise=False):
+      userId=self.userId
+      r=self.db.isExist((userId,))
+      if needRaise and not r:
+         raise ValueError('User not exists')  #! fix
+      return r
+
+   def userSelfEmailAdd(self, user, email, name=None, strictMode=False):
+      userId=self.userId(user)
+      emailId=self.emailId(email)
+      emailIds=self.emailAdd(userId, emailId, name=name, strictMode=False)
+      ids=(userId, 'node_self', emailId)
+      self.db.link(ids, emailIds, strictMode=strictMode, onlyIfExist=False)
+      return ids
+
+   def userSelfEmailCheck(self, user, email):
+      userId=self.userId(user)
+      emailId=self.emailId(email)
+      ids=(userId, 'node_self', emailId)
+      return ids if self.db.isExist(ids) else False
 
    def dateAdd(self, user, date, strictMode=False):
       userId=self.userId(user)
       dateId=self.dateId(date)
-      self.db.set((userId, 'node_date', dateId), False, strictMode=strictMode, onlyIfExist=False)
+      ids=(userId, 'node_date', dateId)
+      self.db.set(ids, False, strictMode=strictMode, onlyIfExist=False)
       self.db.set((userId, 'node_date', dateId, 'node_email'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_date', dateId, 'node_dialog'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_date', dateId, 'node_msg'), False, strictMode=False, onlyIfExist=False)
-      return (userId, 'node_date', dateId)
+      return ids
 
    def emailAdd(self, user, email, name=None, strictMode=False):
       userId=self.userId(user)
       emailId=self.emailId(email)
-      self.db.set((userId, 'node_email', emailId), False, strictMode=strictMode, onlyIfExist=False)
-      return (userId, 'node_email', emailId)
+      ids=(userId, 'node_email', emailId)
+      self.db.set(ids, False, strictMode=strictMode, onlyIfExist=False)
+      return ids
 
    def dialogAdd(self, user, date, strictMode=False):
       userId=self.userId(user)
@@ -190,24 +215,32 @@ class StoreDB(StoreBase):
       ids=self.db.set((userId, 'node_date', dateId, 'node_dialog', 'dialog+'), False, strictMode=strictMode)
       return ids
 
-   def msgAdd(self, user, isIncoming, msg, body, params, raw, label=None, strictMode=True):
+   def msgAdd(self, user, body, headers, raw, label=None, attachments=None, msg=None, strictMode=True, allowCompressRaw=True):
+      msg=msg or headers.get('message-id')
+      assert msg and isinstance(msg, str)
       userId=self.userId(user)
-      _linkTo=[]
+      isIncoming=False
+      if 'from' in headers:
+         isIncoming=not self.userSelfEmailCheck(userId, headers['from'])
+         #! нужна также проверка, есть ли пользователь в адресатах и допо-хак на случай, если письмо было отправлено самому себе
+      else:
+         raise ValueError('No `from` field')  #! fix
       data={
-         'subject':params['subject'],
-         'timestamp':params['timestamp'],
-         'isIncoming':bool(isIncoming),
+         'subject':headers['subject'],
+         'timestamp':headers['date'],
+         'isIncoming':isIncoming,
          'raw':raw,
          'body':body,
          'attachments':None,
       }
       #
-      dateIds=self.dateAdd(userId, params['timestamp'], strictMode=strictMode)
+      _linkTo=[]
+      dateIds=self.dateAdd(userId, headers['date'], strictMode=strictMode)
       msgIds=dateIds+('node_msg', self.msgId(msg))
       #
       isFrom=True
       for k in ('from', 'to', 'cc', 'bcc'):
-         v=params.get(k) or None
+         v=headers.get(k) or None
          if isFrom:
             data[k], v=v, (v,)
          else:
@@ -220,17 +253,25 @@ class StoreDB(StoreBase):
             _linkTo.append(emailIds)
          isFrom=False
       #
-      replyTo=params.get('in-reply-to')
+      replyTo=headers.get('in-reply-to')
       dialogIds=self.msgGet_byId(user, replyTo) if replyTo else False
       if dialogIds is False:
          dialogIds=self.dialogAdd(userId, dateIds[-1])
       _linkTo.append(dialogIds)
       #
-      if params.get('attachments'):
+      if attachments:
          if not self._supports.get('file'):
             self.workspace.log(2, 'Saving files not supported')
          else:
-            pass  #! fixme
+            for o in attachments:
+               _name=o['filename']
+               _content=o.pop('payload')
+               if o['binary']:
+                  _content=base64.b64decode(_content)
+               o.pop('binary', None)
+               o.pop('content_transfer_encoding', None)
+               o['_store_fileId']=self._fileSet(_name, _content, allowOverwrite=not(strictMode))
+         data['attachments']=tuple(attachments) if not isinstance(attachments, tuple) else attachments
       #
       self.db.set(msgIds, data, strictMode=strictMode, onlyIfExist=False)
       for ids in _linkTo:
@@ -261,9 +302,25 @@ class StoreDB(StoreBase):
             msgIds=ids
       #
       if msgIds is None: return False
+      msgIds=self.db.resolveLink(msgIds)
       for ids, _ in self.db.iterBacklink(msgIds, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
          if len(ids)>4 and ids[3]=='node_dialog': return ids[:5]
       raise RuntimeError('Msg founded but no link to dialog')  #! fixme
+
+   def userList(self, filterPrivateData=True, wrapMagic=True):
+      g=self.db.query(
+         what='INDEX, DATA',
+         where='NS=="user"',
+         recursive=False,
+      )
+      for name, data in g:
+         if filterPrivateData:
+            data={k:v for k,v in data.iteritems() if not k.startswith('_')}
+         if wrapMagic:
+            data=MagicDictCold(data)
+            data._MagicDictCold__freeze()
+         yield name, data
+
 
    # def userEdit(self, user, descr=NULL, avatar=NULL):
    #    userId=self.userId(user)
@@ -274,4 +331,4 @@ class StoreDB(StoreBase):
    #    try:
    #       self.db.set(userId, data, allowMerge=True, strictMode=True, onlyIfExist=True)
    #    except dbError.ExistStatusMismatchError:
-   #       raise LogicError(-104)
+   #       raise StoreError(-104)
