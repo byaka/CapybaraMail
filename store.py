@@ -319,7 +319,7 @@ class StoreDB(StoreBase):
          'subject':headers['subject'],
          'timestamp':headers['date'],
          'isIncoming':isIncoming,
-         'raw':raw,
+         'raw':'',  #! очень много места занимают, хорошобы хранить их в файлах
          'body':body,
          'replyTo':None,
          'attachments':None,
@@ -366,11 +366,8 @@ class StoreDB(StoreBase):
             msgIds=ids
       #
       if msgIds is None: return False
-      # msgIds=self.db.resolveLink(msgIds)
       for ids, _ in self.db.iterBacklink(msgIds, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
          if len(ids)>4 and ids[3]=='node_dialog': return ids[:5]
-
-      print '>>', msg, msgIds, tuple(ids for ids,_ in self.db.iterBacklink(msgIds, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False))
       raise RuntimeError('Msg founded but no link to dialog')  #! fixme
 
    def userList(self, filterPrivateData=True, wrapMagic=True):
@@ -386,15 +383,3 @@ class StoreDB(StoreBase):
             data=MagicDictCold(data)
             data._MagicDictCold__freeze()
          yield name, data
-
-
-   # def userEdit(self, user, descr=NULL, avatar=NULL):
-   #    userId=self.userId(user)
-   #    if descr is NULL and avatar is NULL: return
-   #    data={}
-   #    if descr is not NULL: data['descr']=descr
-   #    if avatar is not NULL: data['avatar']=avatar
-   #    try:
-   #       self.db.set(userId, data, allowMerge=True, strictMode=True, onlyIfExist=True)
-   #    except dbError.ExistStatusMismatchError:
-   #       raise StoreError(-104)

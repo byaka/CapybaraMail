@@ -61,10 +61,11 @@ class MyEnv(object):
 
    def _addMsg(self, user, msgObj, body, headers, attachments, labels, extractMoreLabels=True):
       if msgObj.defects:
-         print msgObj.defects
-         # self.workspace.log(2, 'Some defects founded in msg: %s\n'%
-         #    '   \n'.join('%s:\n%s'%(k, '      \n'.join(o)) for k, o in msgObj.defects.iteritems())
-         # )
+         self.workspace.log(2, 'Some defects founded in msg: \t\n%s\n'%
+            '\t\n'.join(
+               '%s:\n%s'%(k, '\t\t\n'.join(o)) for k, o in msgObj.defects.iteritems()
+            )
+         )
       labels=labels or ()
       if extractMoreLabels:
          if headers.get('x-gmail-labels'):
@@ -82,13 +83,23 @@ class MyEnv(object):
 
 if __name__ == '__main__':
    # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
+   # tMap=set()
+   # i1=i2=i3=0
    # for _, headers, (body_plain, body_html), attachments in importer:
-   #    if not headers['references']: continue
+   #    if headers.get('message-id'):
+   #       tMap.add(headers['message-id'])
+   #    else:
+   #       i2+=1
+   #    i1+=1
+   #    if headers.get('in-reply-to') not in tMap: continue
+   #    i3+=1
+   #    print i1, i2, i3
+   #    continue
 
    #    for k in importer._headers:
-   #       print k.upper()+':', strUniDecode('%r'%(headers[k],))
+   #       print k+':', strUniDecode('%r'%(headers[k],))
    #    print
-   #    print body_plain or body_html
+   #    # print body_plain or body_html
    #    print
    #    for o in attachments:
    #       o=o.copy()
@@ -96,4 +107,6 @@ if __name__ == '__main__':
    #       print o
    #    print '='*40
    #    print _.defects, raw_input()
+   # print i1, i2, i3, sys.exit()
+
    MyEnv()()
