@@ -366,9 +366,11 @@ class StoreDB(StoreBase):
             msgIds=ids
       #
       if msgIds is None: return False
-      msgIds=self.db.resolveLink(msgIds)
+      # msgIds=self.db.resolveLink(msgIds)
       for ids, _ in self.db.iterBacklink(msgIds, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
          if len(ids)>4 and ids[3]=='node_dialog': return ids[:5]
+
+      print '>>', msg, msgIds, tuple(ids for ids,_ in self.db.iterBacklink(msgIds, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False))
       raise RuntimeError('Msg founded but no link to dialog')  #! fixme
 
    def userList(self, filterPrivateData=True, wrapMagic=True):

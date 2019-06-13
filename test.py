@@ -61,7 +61,10 @@ class MyEnv(object):
 
    def _addMsg(self, user, msgObj, body, headers, attachments, labels, extractMoreLabels=True):
       if msgObj.defects:
-         self.workspace.log(2, 'Some defects founded in msg: %r'%o.defects)
+         print msgObj.defects
+         # self.workspace.log(2, 'Some defects founded in msg: %s\n'%
+         #    '   \n'.join('%s:\n%s'%(k, '      \n'.join(o)) for k, o in msgObj.defects.iteritems())
+         # )
       labels=labels or ()
       if extractMoreLabels:
          if headers.get('x-gmail-labels'):
@@ -78,7 +81,7 @@ class MyEnv(object):
 
 
 if __name__ == '__main__':
-   # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/part1.mbox')
+   # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
    # for _, headers, (body_plain, body_html), attachments in importer:
    #    if not headers['references']: continue
 
