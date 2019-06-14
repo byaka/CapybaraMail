@@ -338,7 +338,13 @@ class StoreDB(StoreBase):
       self._msgProc_attachments(**p)
       self._msgProc_labels(**p)
       #
-      self.db.set(msgIds, data, strictMode=strictMode, onlyIfExist=False)
+      try:
+         self.db.set(msgIds, data, strictMode=strictMode, onlyIfExist=False)
+      except dbError.ExistStatusMismatchError:
+         print data
+         print self.db.get(msgIds)
+         raise
+
       for ids in linkToMsg:
          self.db.link(
             ids+(msgIds[-1],),

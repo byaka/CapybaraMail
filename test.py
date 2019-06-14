@@ -84,16 +84,21 @@ class MyEnv(object):
 if __name__ == '__main__':
    # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
    # tMap=set()
-   # i1=i2=i3=0
+   # i1=i2=i3=i4=0
+   # print
    # for _, headers, (body_plain, body_html), attachments in importer:
    #    if headers.get('message-id'):
+   #       if headers['message-id'] in tMap:
+   #          i4+=1
+   #          print headers
+   #          print
    #       tMap.add(headers['message-id'])
    #    else:
    #       i2+=1
    #    i1+=1
-   #    if headers.get('in-reply-to') not in tMap: continue
-   #    i3+=1
-   #    print i1, i2, i3
+   #    if headers.get('in-reply-to') in tMap: i3+=1
+
+   #    print console.color.clearLast, i1, i2, i3, i4
    #    continue
 
    #    for k in importer._headers:
@@ -107,6 +112,6 @@ if __name__ == '__main__':
    #       print o
    #    print '='*40
    #    print _.defects, raw_input()
-   # print i1, i2, i3, sys.exit()
+   # print console.color.clearLast, i1, i2, i3, i4, sys.exit()
 
    MyEnv()()
