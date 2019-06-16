@@ -8,6 +8,9 @@ from importMail import ImportMailMBox
 from store import StoreBase, StoreFilesLocal, StoreDB
 from errors import StoreError, AccessDeniedError
 
+from libs.plainText import plaintext
+import textwrap
+
 class MyEnv(object):
    def __init__(self):
       self._istty=console.inTerm()
@@ -45,7 +48,7 @@ class MyEnv(object):
          print
          msg='%(clearLast)sImporting from %(bold)s'+path+'%(end)s: %%i'
          msg=msg%console.color
-      for i, (msgObj, headers, (_, body), attachments) in enumerate(importer):
+      for i, (msgObj, headers, body, attachments) in enumerate(importer):
          self.addMsgIncoming(user, msgObj, body, headers, attachments)
          if self._istty:
             print msg%(i+1)
@@ -72,14 +75,41 @@ class MyEnv(object):
             labels+=headers['x-gmail-labels']
       self.store.msgAdd(user, body, headers, msgObj.raw, attachments=attachments, labels=labels, strictMode=True, allowCompress=True)
 
-   def show(self):
-      showDB(self.store.db)
+   def show(self, branch=None, limit=None):
+      showDB(self.store.db, branch=branch, limit=limit)
 
    def __call__(self):
       assert self._istty
       scope={k:getattr(self, k) for k in dir(self) if not k.startswith('_')}
       console.interact(scope)
 
+   def test_dialogs(self, min_msgs=2):
+      # self.store.db.query(
+      #    what=''
+      # )
+      for idsDialog, _ in self.store.db.iterBranch((self.store.userId('John Smith'), 'node_dialog'), recursive=False):
+         for idsDialogLinked, _ in self.store.db.iterBacklink(idsDialog, recursive=False):
+            lines=['DIALOG (%s)'%idsDialog[-1]]
+            n=len(idsDialogLinked)
+            for idsMsg,_ in self.store.db.iterBranch(idsDialogLinked):
+               data=self.store.db.get(idsMsg)
+               lines.append('%s%s [%s] `%s`'%(
+                  '   '*(len(idsMsg)-n),
+                  '>>' if data.isIncoming else '<<',
+                  data.timestamp,
+                  data.subject
+               ))
+               body=data.bodyPlain or plaintext(data.bodyHtml, linebreaks=1, indentation=False)
+               body=textwrap.wrap(body, 100)
+               s='   '*(1+len(idsMsg)-n)
+               body='\n'.join(s+line for line in body)
+               lines.append(body)
+               lines.append('%s%s'%(
+                  '   '*(len(idsMsg)-n+1),
+                  '='*40
+               ))
+            if len(lines)>=1+min_msgs*3:
+               print '\n'.join(lines)
 
 if __name__ == '__main__':
    # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
@@ -88,10 +118,7 @@ if __name__ == '__main__':
    # print
    # for _, headers, (body_plain, body_html), attachments in importer:
    #    if headers.get('message-id'):
-   #       if headers['message-id'] in tMap:
-   #          i4+=1
-   #          print headers
-   #          print
+   #       if headers['message-id'] in tMap: i4+=1
    #       tMap.add(headers['message-id'])
    #    else:
    #       i2+=1
@@ -99,6 +126,12 @@ if __name__ == '__main__':
    #    if headers.get('in-reply-to') in tMap: i3+=1
 
    #    print console.color.clearLast, i1, i2, i3, i4
+
+   #    if not headers.get('message-id'):
+   #       print _.raw
+   #       print '='*30
+   #       print
+
    #    continue
 
    #    for k in importer._headers:

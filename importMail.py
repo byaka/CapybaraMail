@@ -24,23 +24,29 @@ class ImportMailMBox(object):
          for s in data.split(',')
       )
 
+   def _procMsg(self, buffer):
+      if not buffer: return None
+      s=''.join(buffer)
+      # fileWrite('/home/byaka/Загрузки/gmail_exported/test.txt', s)
+      msg=mailparserEx.parse_from_string(s)
+      headers={}
+      for k in self._headers:
+         headers[k]=getattr(msg, k.replace('-', '_'))
+         if headers[k] and k in self._headers_preprocess:
+            m=self._headers_preprocess[k]
+            headers[k]=m(headers[k])
+      body=msg.body
+      attachments=tuple(msg.attachments)
+      buffer*=0  #~ in PY2 no `list.clear()` but this is same
+      return msg, headers, body, attachments
+
    def __iter__(self):
       with open(self.path, 'rb') as f:
          buffer=[]
          for line in f:
             if not line.startswith('From '): buffer.append(line)
             else:
-               if buffer:
-                  s, buffer=''.join(buffer), None
-                  # fileWrite('/home/byaka/Загрузки/gmail_exported/test.txt', s)
-                  msg=mailparserEx.parse_from_string(s)
-                  headers={}
-                  for k in self._headers:
-                     headers[k]=getattr(msg, k.replace('-', '_'))
-                     if headers[k] and k in self._headers_preprocess:
-                        m=self._headers_preprocess[k]
-                        headers[k]=m(headers[k])
-                  body=msg.body
-                  attachments=tuple(msg.attachments)
-                  yield msg, headers, body, attachments
-               buffer=[]
+               r=self._procMsg(buffer)
+               if r: yield r
+         r=self._procMsg(buffer)
+         if r: yield r

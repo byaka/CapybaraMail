@@ -13,6 +13,7 @@ ERROR_MSG={
    -3:'Access denied',
    -4:'Not implemented',
    -6:'Incorrect input data',
+   -10:'No message-Id',
 }
 
 
@@ -31,6 +32,18 @@ class CapybaraMailError(Exception):
 class AccessDeniedError(CapybaraMailError):
    def __init__(self, msg=None):
       super(AccessDeniedError, self).__init__(code=-3, msg=msg)
+
+class NoMessageIdError(CapybaraMailError):
+   def __init__(self, msg=None):
+      super(NoMessageIdError, self).__init__(code=-10, msg=msg)
+
+class IncorrectInputError(CapybaraMailError):
+   def __init__(self, msg=None):
+      super(IncorrectInputError, self).__init__(code=-6, msg=msg)
+
+class NotSupportedError(CapybaraMailError):
+   def __init__(self, msg=None):
+      super(NotSupportedError, self).__init__(code=-4, msg=msg)
 
 class StoreError(CapybaraMailError):
    pass

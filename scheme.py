@@ -9,13 +9,20 @@ __all__=['SCHEME']
 SCHEME=[
 #  (Name, (Parents, Childs, Columns, AllowOnlyIndexed[True], AllowOnlyNumerable[False], localAutoIncrement[fromSetts], linkChilds[fromSetts])) # noqa
 
-   ('user', (None, ['node_date', 'node_email', 'node_label', 'node_self'], {
+   ('user', (None, ['node_date', 'node_email', 'node_label', 'node_self', 'node_dialog', 'node_problem'], {
       '_passwordHash':'str',
       'isActive':'bool',
       'name':'str',
       'descr':('str', 'none'),
       'avatar':('str', 'none'),
    }, True, False, False, None)),
+
+   ('node_problem', ('user', 'problem', False, False, False, False, True)),
+
+   ('problem', ('node_problem', None, {
+      'name':'str',
+      'descr':('str', 'none'),
+   }, True, False, False, True)),
 
    ('node_self', ('user', 'email', False, False, False, False, True)),
 
@@ -29,7 +36,7 @@ SCHEME=[
 
    ('date', ('node_date', ['node_email', 'node_dialog', 'node_msg'], False, True, True, False, None)),
 
-   ('node_dialog', ('date', 'dialog', False, False, False, False, None)),
+   ('node_dialog', (['user', 'date'], 'dialog', False, False, False, True, None)),
 
    ('dialog', (['node_dialog'], ['msg'], False, True, True, True, None)),
 
@@ -47,7 +54,8 @@ SCHEME=[
       'replyTo':('str', 'none'),
       'returnPath':('str', 'none'),
       'raw':'str',
-      'body':('str', 'none'),
+      'bodyPlain':('str', 'none'),
+      'bodyHtml':('str', 'none'),
       'attachments':('tuple', 'none'),
    }, True, False, False, None)),
 

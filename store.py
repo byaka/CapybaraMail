@@ -4,7 +4,7 @@ from VombatiDB import VombatiDB
 from VombatiDB import errors as dbError
 
 from scheme import SCHEME
-from errors import StoreError, AccessDeniedError
+from errors import *
 
 class StoreBase(object):
    def __init__(self, workspace, **kwargs):
@@ -43,7 +43,7 @@ class StoreFilesBase(StoreBase):
       self.supports.file=True
       self.supports.file_sanitize=True
 
-   def _fileSanitize(self, name):
+   def _fileNameNormalize(self, name):
       assert isinstance(name, (str, unicode))
       if isinstance(name, unicode):
          try:
@@ -51,10 +51,10 @@ class StoreFilesBase(StoreBase):
          except Exception: pass
       return base64.urlsafe_b64encode(name)
 
-   def _fileSet(self, name, content, allowOverwrite=False):
+   def _fileSet(self, name, content, nameNormalized=False, allowOverwrite=False):
       raise NotImplementedError
 
-   def _fileGet(self, name, nameEncoded=True, asGenerator=False):
+   def _fileGet(self, name, nameNormalized=True, asGenerator=False):
       raise NotImplementedError
 
 class StoreFilesLocal(StoreFilesBase):
@@ -64,9 +64,12 @@ class StoreFilesLocal(StoreFilesBase):
          os.makedirs(self.settings.fileStorePath)
       super(StoreFilesLocal, self)._init(**kwargs)
 
-   def _fileSet(self, name, content, allowOverwrite=False, strictMode=False):
+   def _fileSet(self, name, content, nameNormalized=False, allowOverwrite=False, strictMode=False):
       assert isinstance(content, (str, unicode))
-      fn=self._fileSanitize(name)
+      # content=content.encode('utf-8')
+      if nameNormalized: fn=name
+      else:
+         fn=self._fileNameNormalize(name)
       fp=os.path.join(self._settings['fileStorePath'], fn)
       if os.path.exists(fp) and not allowOverwrite:
          if strictMode:
@@ -77,10 +80,10 @@ class StoreFilesLocal(StoreFilesBase):
          f.write(content)
       return fn
 
-   def _fileGet(self, name, nameEncoded=True, asGenerator=False):
-      if nameEncoded: fn=name
+   def _fileGet(self, name, nameNormalized=True, asGenerator=False):
+      if nameNormalized: fn=name
       else:
-         fn=self._fileSanitize(name)
+         fn=self._fileNameNormalize(name)
       fp=os.path.join(self._settings['fileStorePath'], fn)
       if not os.path.exists(fp):
          raise IOError('File not exists')  #! fix
@@ -169,25 +172,44 @@ class StoreDB(StoreBase):
             return 'msg#%s'%msg
       raise ValueError('Incorrect type')
 
+   @staticmethod
+   def problemId(problem):
+      if isinstance(problem, (str, unicode)):
+         if problem.startswith('problem#'): return problem
+         else:
+            #! нужен более изящный способ замены
+            return 'problem#%s'%problem.lower().replace(' ', '_').replace('?', '?_').replace('+', '+_')
+      raise ValueError('Incorrect type')
+
    def userAdd(self, user, password, descr=None, avatar=None, strictMode=True):
-      assert isStr(password) and password
+      assert user and isinstance(user, (str, unicode))
+      assert password and isinstance(password, (str, unicode))
+      assert isinstance(descr, (str, unicode, types.NoneType))
+      assert isinstance(avatar, (str, unicode, types.NoneType))
+      #
+      if avatar and not self._supports.get('file'):
+         raise NotSupportedError('Cant save avatar')
       userId=self.userId(user)
       if self.db.isExist(userId):
          raise StoreError(-106)
       passwordHash=password  #! здесь добавить хеширование
-      #! аватрку нужно записывать в fileStore и оставлять лишь ссылку
+      if avatar:
+         s='%s_avatar'%self._fileNameNormalize(userId)
+         avatar=self._fileSet(s, avatar, allowOverwrite=False, strictMode=True)
       data={
          '_passwordHash':passwordHash,
          'isActive':True,
          'name':user,
-         'descr':descr,
-         'avatar':avatar,
+         'descr':descr or None,
+         'avatar':avatar or None,
       }
       ids=self.db.set(userId, data, strictMode=strictMode, onlyIfExist=False)
       self.db.set((userId, 'node_self'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_date'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_email'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_label'), False, strictMode=False, onlyIfExist=False)
+      self.db.set((userId, 'node_dialog'), False, strictMode=False, onlyIfExist=False)
+      self.db.set((userId, 'node_problem'), False, strictMode=False, onlyIfExist=False)
       return ids
 
    def userIsExist(self, user, needException=False):
@@ -211,6 +233,14 @@ class StoreDB(StoreBase):
       ids=(userId, 'node_self', emailId)
       return ids if self.db.isExist(ids) else False
 
+   def problemAdd(self, problem, descr=None, strictMode=False):
+      problemId=self.problemId(problem)
+      data={
+         'name':problem,
+         'descr':descr,
+      }
+      return self.db.set((userId, 'node_problem', problemId), data, strictMode=strictMode, onlyIfExist=False)
+
    def dateAdd(self, user, date, strictMode=False):
       userId=self.userId(user)
       dateId=self.dateId(date)
@@ -225,10 +255,9 @@ class StoreDB(StoreBase):
       emailId=self.emailId(email)
       return self.db.set((userId, 'node_email', emailId), False, strictMode=strictMode, onlyIfExist=False)
 
-   def dialogAdd(self, user, date, strictMode=False):
+   def dialogAdd(self, user, strictMode=True):
       userId=self.userId(user)
-      dateId=self.dateId(date)
-      return self.db.set((userId, 'node_date', dateId, 'node_dialog', 'dialog+'), False, strictMode=strictMode)
+      return self.db.set((userId, 'node_dialog', 'dialog+'), False, strictMode=strictMode, onlyIfExist=False)
 
    def labelAdd(self, user, label, descr=None, color=None, strictMode=False):
       if not label:
@@ -285,24 +314,36 @@ class StoreDB(StoreBase):
          replyTo=headers.get('references') or ''
          replyTo=tuple(s.strip() for s in replyTo.split(' ') if s.strip())
          if replyTo: replyTo=replyTo[-1]
-      ids=self.msgGet_byId(user, replyTo) if replyTo else False
+      ids=self.dialogFind_byMsg(user, replyTo, findPoint=True) if replyTo else False
       if ids is False:
-         ids=self.dialogAdd(userId, dateIds[-1])
+         if replyTo:
+            problemIds=self.problemAdd('Parent message missed')
+            linkToMsg.append(problemIds)
+         #
+         ids=self.dialogAdd(userId)
+         ids=self.db.link(
+            dateIds+('node_dialog', ids[-1]),
+            ids, strictMode=False, onlyIfExist=False)
       linkToMsg.append(ids)
 
-   def _msgProc_attachments(self, attachments=NULL, strictMode=NULL, data=NULL, **kwargs):
+   def _msgProc_attachments(self, msg=NULL, attachments=NULL, strictMode=NULL, data=NULL, **kwargs):
       if attachments:
          if not self._supports.get('file'):
             self.workspace.log(2, 'Saving files not supported')
          else:
-            for o in attachments:
-               name=o['filename']
+            n=self._fileNameNormalize(msg)
+            for i, o in enumerate(attachments):
+               name='%s_%i'%(n, i+1)
                content=o.pop('payload')
                if o['binary']:
                   content=base64.b64decode(content)
+               else:
+                  try:
+                     content=content.encode("utf-8")
+                  except Exception: pass
                o.pop('binary', None)
                o.pop('content_transfer_encoding', None)
-               o['_store_fileId']=self._fileSet(name, content, allowOverwrite=not(strictMode), strictMode=False)
+               o['_store_fileId']=self._fileSet(name, content, nameNormalized=True, allowOverwrite=not(strictMode), strictMode=False)
          data['attachments']=tuple(attachments) if not isinstance(attachments, tuple) else attachments
 
    def _msgProc_labels(self, userId=NULL, labels=NULL, linkInMsg=NULL, **kwargs):
@@ -313,14 +354,21 @@ class StoreDB(StoreBase):
 
    def msgAdd(self, user, body, headers, raw, labels=None, attachments=None, msg=None, strictMode=True, allowCompress=True):
       msg=msg or headers.get('message-id')
-      assert msg and isinstance(msg, (str, unicode))
+      if not msg:
+         raise NoMessageIdError()
+         if isinstance(msg, int): msg=str(msg)
+      assert isinstance(msg, (str, unicode))
+      assert isinstance(body, tuple) and len(body)==2
+      #
       isIncoming=self._msgProc_isIncoming(user, headers, raw, strictMode)
+      bodyPlain, bodyHtml=body
       data={
          'subject':headers['subject'],
          'timestamp':headers['date'],
          'isIncoming':isIncoming,
-         'raw':'',  #! очень много места занимают, хорошобы хранить их в файлах
-         'body':body,
+         'raw':'',  #! очень много места занимают, хорошо бы хранить их в файлах
+         'bodyPlain':bodyPlain,
+         'bodyHtml':bodyHtml,
          'replyTo':None,
          'attachments':None,
       }
@@ -341,9 +389,14 @@ class StoreDB(StoreBase):
       try:
          self.db.set(msgIds, data, strictMode=strictMode, onlyIfExist=False)
       except dbError.ExistStatusMismatchError:
+         #~ проверяем, если у письма в получателях более одного нашего ящика, то это просто дубликат пришедший на альтернативную почту.
+         #~ для верности также проверяем все поля кроме timestamp, body* и raw
+         print '-'*30
          print data
          print self.db.get(msgIds)
-         raise
+         print '-'*30
+         print
+         return False
 
       for ids in linkToMsg:
          self.db.link(
@@ -355,25 +408,27 @@ class StoreDB(StoreBase):
             ids, strictMode=False, onlyIfExist=False)
       return msgIds
 
-   def msgGet_byId(self, user, msg, date=NULL):
+   def dialogFind_byMsg(self, user, msg, date=NULL, findPoint=False):
       #? можно ускорить для несуществующих в индексе добавив отдельный фильтр блума
       userId=self.userId(user)
-      idsSuf=('node_msg', self.msgId(msg))
-      msgIds=None
+      msgId=self.msgId(msg)
+      idsSuf=('node_msg', msgId)
+      target=None
       if date is NULL:
          for ids, (props, l) in self.db.iterBranch((userId, 'node_date'), recursive=False, safeMode=False, calcProperties=False, skipLinkChecking=True, allowContextSwitch=False):
             ids+=idsSuf
             if self.db.isExist(ids):
-               msgIds=ids
+               target=ids
                break
       else:
          ids=(userId, 'node_date', self.dateId(date))+idsSuf
          if self.db.isExist(ids):
-            msgIds=ids
+            target=ids
       #
-      if msgIds is None: return False
-      for ids, _ in self.db.iterBacklink(msgIds, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
-         if len(ids)>4 and ids[3]=='node_dialog': return ids[:5]
+      if target is None: return False
+      for ids, _ in self.db.iterBacklink(target, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
+         if len(ids)>4 and ids[3]=='node_dialog' and ids[-1]==msgId:
+            return ids
       raise RuntimeError('Msg founded but no link to dialog')  #! fixme
 
    def userList(self, filterPrivateData=True, wrapMagic=True):
