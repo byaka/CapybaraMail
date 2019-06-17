@@ -37,8 +37,6 @@ class ApiBase(object):
       self.store.start()
 
 class ApiAccaunt(ApiBase):
-   def _init(self, **kwargs):
-      super(ApiUser, self)._init(**kwargs)
 
    def accauntAdd(self, login, password, descr=None, avatar=None, connector=None):
       """
@@ -81,3 +79,161 @@ class ApiAccaunt(ApiBase):
       :param bool|none to: New active-status. If `None`, it will switched to opposite status (defaults to None).
       """
       pass
+
+class ApiLabel(ApiBase):
+
+   def labelList(self, login, count=True, unreadOnly=False, byDialog=True):
+      """
+      List all labels, also count messages or dialogs in each (all and unread).
+
+      :note:
+      As labels may be nested, in this case it will be tuple (or join it with `/` and pass like string). Also parents not counts items in children.
+
+      :param str login: Login of accaunt.
+      :param bool count: Enable counting of messages or dialogs (defaults to True).
+      :param bool unreadOnly: Count only unreaded (defaults to False).
+      :param bool byDialog: Count dialogs or messages (defaults to True).
+      :return tuple:
+
+      :response_example:
+      (
+         {'name':'Label 1', 'descr':'Just non-nested label', 'color':'red', 'countAll':0, 'countUnread':0},
+         {'name':('Label 1', 'Label 2'), 'descr':'Just nested label', 'color':'#fff', 'countAll':10, 'countUnread':1},
+         {'name':('Label 1', 'Label 2', 'Label 3'), 'descr':'We need to go deeper', 'color':'green', 'countAll':100, 'countUnread':3},
+
+      )
+      """
+      pass
+
+   def labelAdd(self, login, label, descr=None, color=None):
+      """
+      Add new label to accaunt.
+
+      :note:
+      If you want to create nested label - pass tuple of ierarchy or join it with `/` and pass like string.
+
+      :param str login: Login of accaunt.
+      :param str|tuple label: Label name or full ierarchy of names (for nested labels).
+      :param str|none descr: Description for label (defaults to None).
+      :param str|none color: Any representation of color (defaults to None).
+      """
+      pass
+
+   def labelEdit(self, login, label, descr=None, color=None):
+      """
+      Edit existed label in accaunt.
+
+      :note:
+      If you want to edit nested label - pass tuple of ierarchy.
+
+      :param str login: Login of accaunt.
+      :param str|tuple label: Label name or full ierarchy of names (for nested labels).
+      :param str|none descr: Description for label (defaults to None).
+      :param str|none color: Any representation of color (defaults to None).
+      """
+      pass
+
+class ApiFilter(ApiBase):
+
+   def dialogs(self, login, returnTree=False, returnFull=False, byLabel=None, byDate=None, byUnread=None, byFrom=None, byTo=None):
+      """
+      Filter dialogs by conditions.
+
+      :note:
+      This method allows to filter with `AND` and `OR` conditions. Last level is interpreted as `OR`, and previous level is `AND`.
+
+      :note:
+      If you want to use nested label - pass ierarchy, joined with `/` like string.
+
+      :example:
+      >>> api.dialogs('user1',
+         byLabel=(('Label 1', 'Label 2'), ('Label 3/Label4',)),  # is ('Label 1' or 'Label 2') and 'Label 3',
+         byUnread=True,  # only anread
+         byFrom=('myEmail1@test.com', 'myEmail2@test.com')  # 'myEmail1@test.com' or 'myEmail2@test.com'
+      )
+
+      :param str login: Login of accaunt.
+      :param bool returnTree: Not implemented for now.
+      :param bool returnFull: Switch results from dialog-ids and msg-ids only to full msgs.
+      :param tuple|none byLabel: Combination of labels (defaults to None).
+      :param tuple|none byDate: Combination of dates (defaults to None).
+      :param bool|none byUnread: Filter by unread-status or ignore if `none` (defaults to None).
+      :param tuple|none byFrom: Combination of sender's emails (defaults to None).
+      :param tuple|none byTo: Combination of recipient's emails (matched in `To`, `cc`, `bcc` fields) (defaults to None).
+      :return tuple:
+
+      :response_example: `returnTree` is False and `returnFull` is False
+      (
+         ('dialog1', ('msg1', 'msg2', 'msg3')),
+         ('dialog2', ('msg1', 'msg2', 'msg3')),
+      )
+
+      :response_example: `returnTree` is False and `returnFull` is True
+      (
+         ('dialog1', (
+            {'id':'msg1', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg2', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg3', 'from':'blahblah', 'subject':'blahblah'},
+         )),
+         ('dialog2', (
+            {'id':'msg1', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg2', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg3', 'from':'blahblah', 'subject':'blahblah'},
+         )),
+      )
+
+      """
+      #! все это подходит для фильтра `msgs` но как быть с диалогами? поля относятся именно к сообщениям
+      pass
+
+   def messages(self, login, returnTree=False, returnFull=False, byLabel=None, byDate=None, byUnread=None, byFrom=None, byTo=None):
+      """
+      Filter messages by conditions. Works same as `dialogs` method, but dont groups by dialogs.
+
+      :note:
+      This method allows to filter with `AND` and `OR` conditions. Last level is interpreted as `OR`, and previous level is `AND`.
+
+      :note:
+      If you want to use nested label - pass ierarchy, joined with `/` like string.
+
+      :example:
+      >>> api.dialogs('user1',
+         byLabel=(('Label 1', 'Label 2'), ('Label 3/Label4',)),  # is ('Label 1' or 'Label 2') and 'Label 3',
+         byUnread=True,  # only anread
+         byFrom=('myEmail1@test.com', 'myEmail2@test.com')  # 'myEmail1@test.com' or 'myEmail2@test.com'
+      )
+
+      :param str login: Login of accaunt.
+      :param bool returnTree: Not implemented for now.
+      :param bool returnFull: Switch results from dialog-ids and msg-ids only to full msgs.
+      :param tuple|none byLabel: Combination of labels (defaults to None).
+      :param tuple|none byDate: Combination of dates (defaults to None).
+      :param bool|none byUnread: Filter by unread-status or ignore if `none` (defaults to None).
+      :param tuple|none byFrom: Combination of sender's emails (defaults to None).
+      :param tuple|none byTo: Combination of recipient's emails (matched in `To`, `cc`, `bcc` fields) (defaults to None).
+      :return tuple:
+
+      :response_example: `returnTree` is False and `returnFull` is False
+      (
+         ('dialog1', ('msg1', 'msg2', 'msg3')),
+         ('dialog2', ('msg1', 'msg2', 'msg3')),
+      )
+
+      :response_example: `returnTree` is False and `returnFull` is True
+      (
+         ('dialog1', (
+            {'id':'msg1', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg2', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg3', 'from':'blahblah', 'subject':'blahblah'},
+         )),
+         ('dialog2', (
+            {'id':'msg1', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg2', 'from':'blahblah', 'subject':'blahblah'},
+            {'id':'msg3', 'from':'blahblah', 'subject':'blahblah'},
+         )),
+      )
+
+      """
+      pass
+
+
