@@ -136,11 +136,17 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def messages(self, login, returnDialogs=True, returnTree=False, returnFull=False, byLabel=None, byDate=None, byUnread=None, byFrom=None, byTo=None):
+   def messages(self, login, date=None, stopDates=10, stopResults=10, query=None, reverseSortDate=False, returnDialogs=True, returnTree=False, returnFull=False):
+      #? как сделать пагинацию? планировалась пагинация по датам и временным промежуткам - такая пагинация отлично разруливается на стороне филтрации и отлично оптимизирует поиск
+      #? можно ли задавать смещение типа *дата* + N первых непустых дней. тогда для подгрузки следующих резудьатов нужно передать тотже запрос, но изменить дату на последнюю в запросе + 1
+      #? этот вариант кажется приемлимым, остается понять как это реализовать оптимально на этапе филтрации.
+      #? например такё
+      #? сперва мы генерируем запрос на основе переданного конфига, в процессе ища начальную дату если по ней идет фильтрация. а затем идем по датам начиная он начальной и выполняем совокупность операций над сетами. после чего для найденных результатов если нужно происходит ресолвинг на уровень диалогов. полученный результат мерджим с предыдущими и считаем колво непустых дат и колва общих результатов - не пора ли остановиться.
       """
-      Filter messages by conditions. Works same as `dialogs` method, but dont groups by dialogs.
+      Filter messages by conditions. Results grouped by date, so you receive only results for passed dates.
 
       :param str login: Login of accaunt.
+      :param tuple|int|datetime date: You will got results only for this dates.
       :param bool returnDialogs: If `True`, results will be grouped by dialogs.
       :param bool returnTree: Not implemented for now.
       :param bool returnFull: Switch results from dialog-ids and msg-ids only to full msgs.
@@ -159,8 +165,8 @@ class ApiFilter(ApiBase):
 
       :example:
          >>> api.dialogs('user1',
-            byLabel=(('Label 1', 'Label 2'), ('Label 3/Label4',)),  # is ('Label 1' or 'Label 2') and 'Label 3',
-            byUnread=True,  # only anread
+            byLabel=(('Label 1', 'Label 2'), ('Label 3/Label4',)),  # same as ('Label 1' or 'Label 2') and 'Label 3',
+            byUnread=True,  # only unread
             byFrom=('myEmail1@test.com', 'myEmail2@test.com')  # 'myEmail1@test.com' or 'myEmail2@test.com'
          )
 
@@ -188,6 +194,22 @@ class ApiFilter(ApiBase):
 
       """
       #! как реализовать `NOT` паттерны? они необходимы, но как их красиво задавать неясно
+      #! в случае группировки по диалогам нужно отдельно передавать идентификаторы сообщений, которые попали под условия поиска - это позволит например автоматически развернуть эти сообщения при раскрытии диалога.
       pass
 
+      # примеры
+      OBJ=object()
+
+      (OBJ.KEY1 == 'test2') or (OBJ.KEY1 != 'test' and OBJ.KEY2==10) or (OBJ.KEY3<=100)
+
+      {
+          'or':[
+              {'key':'KEY1', 'value':'test2', 'match':'=='},
+              {'and':[
+                  {'key':'KEY1', 'value':'test', 'match':'!='},
+                  {'key':'KEY2', 'value':10, 'match':'=='},
+              ]},
+              {'key':'KEY3', 'value':100, 'match':'<='},
+          ]
+      }
 
