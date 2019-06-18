@@ -5,7 +5,7 @@ from VombatiDB import VombatiDB, showDB, showStats, Workspace
 from VombatiDB import errors as dbError
 
 from importMail import ImportMailMBox
-from store import StoreBase, StoreFilesLocal, StoreDB
+from store import StoreBase, StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx
 from errors import StoreError, AccessDeniedError
 
 from libs.plainText import plaintext
@@ -16,7 +16,7 @@ class MyEnv(object):
       self._istty=console.inTerm()
       self._autoLabel_inbox='Inbox'
       self.workspace=Workspace()
-      self.store=ClassFactory(StoreBase, (StoreFilesLocal, StoreDB))(self.workspace)
+      self.store=ClassFactory(StoreBase, (StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx))(self.workspace)
       self.store.start()
 
    def listUsers(self):
@@ -88,7 +88,7 @@ class MyEnv(object):
       #    what=''
       # )
       for idsDialog, _ in self.store.db.iterBranch((self.store.userId('John Smith'), 'node_dialog'), recursive=False):
-         for idsDialogLinked, _ in self.store.db.iterBacklink(idsDialog, recursive=False):
+         for idsDialogLinked, _ in self.store.db.iterBacklinks(idsDialog, recursive=False):
             lines=['DIALOG (%s)'%idsDialog[-1]]
             n=len(idsDialogLinked)
             for idsMsg,_ in self.store.db.iterBranch(idsDialogLinked):

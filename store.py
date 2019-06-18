@@ -426,7 +426,7 @@ class StoreDB(StoreBase):
             target=ids
       #
       if target is None: return False
-      for ids, _ in self.db.iterBacklink(target, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
+      for ids, _ in self.db.iterBacklinks(target, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
          if len(ids)>4 and ids[3]=='node_dialog' and ids[-1]==msgId:
             return ids
       raise RuntimeError('Msg founded but no link to dialog')  #! fixme
@@ -444,3 +444,64 @@ class StoreDB(StoreBase):
             data=MagicDictCold(data)
             data._MagicDictCold__freeze()
          yield name, data
+
+class StoreDB_dialogFinderEx(StoreDB):
+   def __queryCompile_forKey(self, rM, rO, userId, key, value, match):
+      if key=='label':
+         rM("CHECK_WITH=DB.getBacklinks(('%s', 'node_label', '%s'), strictMode=False)"%(userId, self.labelId(value)))
+         rM("CHECK_WITH=set()")
+         rM("tArr=DB.iterBacklinks(('%s', 'node_email', '%s'), recursive=False)"%(userId, self.emailId(value)))
+         rM("CHECK_WITH.update(*(DB.getLinks(ids, strictMode=False) for ids in tArr if len(ids)==5 and ids[1]=='node_date'))")
+      elif key=='to':
+         raise NotImplementedError
+      elif key=='unreaded':
+         raise NotImplementedError
+      elif key=='date':
+         raise NotImplementedError
+      else:
+         raise ValueError('Unknown key')  #! fix
+      matchMap={
+         '==':'&',
+         '!=':'-',
+      }
+      if match not in matchMap:
+         raise ValueError('Unknown matching pattern')  #! fix
+      rM("CURR_PART=CURR_PART %s CHECK_WITH")
+      rM("if not CURR_PART: continue")
+
+   def __queryCompile_forOp(self, rM, rO, userId, op, conds):
+      if not isinstance(conds, (list, tuple, types.GeneratorType)):
+         raise ValueError('Incorrect section in query: %r'%conds)
+      for o in conds:
+         if 'key' in o:
+            self.__queryCompile_forKey(rM, rO, userId, o['key'], o['value'], o['match'])
+         elif len(o)==1:
+            self.__queryCompile_forOp(rM, rO, userId, *next(o.iteritems()))
+
+      # while True:
+      #    op, q=next(queue)
+      #    if not isinstance(q, (list, tuple, types.GeneratorType)):
+      #       raise ValueError('Incorrect section in query: %r'%q)
+      #    if op=='and':
+      #       for o in q:
+      #          if 'key' in o:
+      #             res+=self.__queryCompile_forKey(userId, o['key'], o['value'], o['match'])
+      #             res.append("if not CURR_PART: continue")
+      #          else:
+
+
+   def __queryCompile(self, userId, query):
+      op, conds=('', (query,)) if len(query)!=1 else next(query.iteritems())
+      res=[]
+      self.__queryCompile_forOp(res.append, res, userId, op, conds)
+      print '\n'.join(res)
+
+
+
+
+
+
+   def dialogFindEx(self, user, query, reverseSortDate=False, returnDialogs=True, returnFull=False):
+      userid=self.userId(user)
+      self.__queryCompile(userid, query)
+
