@@ -203,13 +203,13 @@ class ApiFilter(ApiBase):
       (OBJ.KEY1 == 'test2') or (OBJ.KEY1 != 'test' and OBJ.KEY2==10) or (OBJ.KEY3<=100)
 
       {
-          'or':[
-              {'key':'KEY1', 'value':'test2', 'match':'=='},
-              {'and':[
-                  {'key':'KEY1', 'value':'test', 'match':'!='},
-                  {'key':'KEY2', 'value':10, 'match':'=='},
-              ]},
-              {'key':'KEY3', 'value':100, 'match':'<='},
-          ]
+         'or':[
+            {'key':'KEY1', 'value':'test2', 'match':'=='},
+            {'and':[
+               {'key':'KEY1', 'value':'test', 'match':'!='},
+               {'key':'KEY2', 'value':10, 'match':'=='},
+            ]},
+            {'key':'KEY3', 'value':100, 'match':'<='},
+         ]
       }
 
