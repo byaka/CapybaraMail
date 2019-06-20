@@ -452,6 +452,8 @@ class StoreDB_dialogFinderEx(StoreDB):
          rM("CHECK_WITH=set()")
          rM("tArr=DB.iterBacklinks(('%s', 'node_email', '%s'), recursive=False)"%(userId, self.emailId(value)))
          rM("CHECK_WITH.update(*(DB.getLinks(ids, strictMode=False) for ids in tArr if len(ids)==5 and ids[1]=='node_date'))")
+      elif key=='from':
+         raise NotImplementedError
       elif key=='to':
          raise NotImplementedError
       elif key=='unreaded':
@@ -466,7 +468,7 @@ class StoreDB_dialogFinderEx(StoreDB):
       }
       if match not in matchMap:
          raise ValueError('Unknown matching pattern')  #! fix
-      rM("CURR_PART=CURR_PART %s CHECK_WITH")
+      rM("CURR_PART=CURR_PART %s CHECK_WITH"%matchMap[match])
       rM("if not CURR_PART: continue")
 
    def __queryCompile_forOp(self, rM, rO, userId, op, conds):
