@@ -446,14 +446,24 @@ class StoreDB(StoreBase):
          yield name, data
 
 class StoreDB_dialogFinderEx(StoreDB):
-   def __queryCompile_forKey(self, rM, rO, userId, key, value, match):
+   __finderMatchMap={
+      '==':'&',
+      '!=':'-',
+   }
+
+   def __queryCompile_forKey(self, toPre, toIter, counter, userId, key, value, match):
+      if match not in self.__finderMatchMap:
+         raise ValueError('Unknown matching pattern')  #! fix
       if key=='label':
-         rM("CHECK_WITH=DB.getBacklinks(('%s', 'node_label', '%s'), strictMode=False)"%(userId, self.labelId(value)))
-         rM("CHECK_WITH=set()")
-         rM("tArr=DB.iterBacklinks(('%s', 'node_email', '%s'), recursive=False)"%(userId, self.emailId(value)))
-         rM("CHECK_WITH.update(*(DB.getLinks(ids, strictMode=False) for ids in tArr if len(ids)==5 and ids[1]=='node_date'))")
+         counter['CHECK_WITH_label']+=1
+         var='CHECK_WITH_label%i'%counter['CHECK_WITH_label']
+         toPre("%s=db_getBacklinks(('%s', 'node_label', '%s'), strictMode=False, safeMode=False)"%(var, userId, self.labelId(value)))
       elif key=='from':
-         raise NotImplementedError
+         counter['CHECK_WITH_from']+=1
+         var='CHECK_WITH_from%i'%counter['CHECK_WITH_from']
+         toPre("%s=set()"%var)
+         toPre("g=db_iterBacklinks(('%s', 'node_email', '%s'), recursive=False)"%(userId, self.emailId(value)))
+         toPre("%s.update(*(db_getLinked(ids, strictMode=False, safeMode=False) for ids in g if len(ids)==5 and ids[1]=='node_date'))"%var)
       elif key=='to':
          raise NotImplementedError
       elif key=='unreaded':
@@ -462,48 +472,111 @@ class StoreDB_dialogFinderEx(StoreDB):
          raise NotImplementedError
       else:
          raise ValueError('Unknown key')  #! fix
-      matchMap={
-         '==':'&',
-         '!=':'-',
-      }
-      if match not in matchMap:
-         raise ValueError('Unknown matching pattern')  #! fix
-      rM("CURR_PART=CURR_PART %s CHECK_WITH"%matchMap[match])
-      rM("if not CURR_PART: continue")
+      toIter("CURR_PART %s= %s  # OBJ.%s %s '%s'"%(self.__finderMatchMap[match], var, key, match, value))
 
-   def __queryCompile_forOp(self, rM, rO, userId, op, conds):
+   def __queryCompile_forOp(self, toPre, toIter, counter, userId, op, conds):
       if not isinstance(conds, (list, tuple, types.GeneratorType)):
          raise ValueError('Incorrect section in query: %r'%conds)
-      for o in conds:
-         if 'key' in o:
-            self.__queryCompile_forKey(rM, rO, userId, o['key'], o['value'], o['match'])
-         elif len(o)==1:
-            self.__queryCompile_forOp(rM, rO, userId, *next(o.iteritems()))
-
-      # while True:
-      #    op, q=next(queue)
-      #    if not isinstance(q, (list, tuple, types.GeneratorType)):
-      #       raise ValueError('Incorrect section in query: %r'%q)
-      #    if op=='and':
-      #       for o in q:
-      #          if 'key' in o:
-      #             res+=self.__queryCompile_forKey(userId, o['key'], o['value'], o['match'])
-      #             res.append("if not CURR_PART: continue")
-      #          else:
-
+      if not conds: return
+      #! переписать без рекурсии
+      if op is None:
+         toIter('if CURR_PART:')
+         tO=[]
+         toIter(tO)
+         _toIter=tO.append
+         #
+         for o in conds:
+            if 'key' in o:
+               self.__queryCompile_forKey(toPre, _toIter, counter, userId, o['key'], o['value'], o['match'])
+            elif len(o)==1:
+               self.__queryCompile_forOp(toPre, _toIter, counter, userId, *next(o.iteritems()))
+      elif op=='and':
+         toIter('# AND <<')
+         #
+         for o in conds:
+            if 'key' in o:
+               self.__queryCompile_forKey(toPre, toIter, counter, userId, o['key'], o['value'], o['match'])
+            elif len(o)==1:
+               self.__queryCompile_forOp(toPre, toIter, counter, userId, *next(o.iteritems()))
+         #
+         toIter('# >> AND')
+      elif op=='or':
+         toIter('# OR <<')
+         counter['CURR_PART_BCK']+=1
+         CURR_PART_BCK='CURR_PART_BCK%i'%counter['CURR_PART_BCK']
+         toIter(CURR_PART_BCK+'=CURR_PART.copy()')
+         _toIter=toIter
+         #
+         for i, o in enumerate(conds):
+            if i:
+               _toIter('if not CURR_PART:')
+               tO=[]
+               _toIter(tO)
+               _toIter=tO.append
+            if i:
+               _toIter('CURR_PART='+CURR_PART_BCK)
+            if 'key' in o:
+               self.__queryCompile_forKey(toPre, _toIter, counter, userId, o['key'], o['value'], o['match'])
+            elif len(o)==1:
+               self.__queryCompile_forOp(toPre, _toIter, counter, userId, *next(o.iteritems()))
+         #
+         toIter('# >> OR')
+      else:
+         raise ValueError  #! fix
 
    def __queryCompile(self, userId, query):
-      op, conds=('', (query,)) if len(query)!=1 else next(query.iteritems())
-      res=[]
-      self.__queryCompile_forOp(res.append, res, userId, op, conds)
-      print '\n'.join(res)
+      _tab=' '*3
+      pre=[]
+      code=["""
+      def RUN():
+         try:
+            db_getLinked=DB.getLinked
+            db_get=DB.get
+            db_getBacklinks=DB.getBacklinks
+            db_iterBacklinks=DB.iterBacklinks
+            # PRE <<
+            %s
+            # >> PRE
+            cAll=cDays=0
+            g=DATES
+            for date, dateId in g:
+               IDS=('%s', 'node_date', dateId, 'node_msg')
+               CURR_PART=db_getLinked(IDS, strictMode=False, safeMode=True)"""]
+      _code=code.append
+      counter=defaultdict(int)
+      self.__queryCompile_forOp(pre.append, _code, counter, userId, None, (query,))
+      _code('if not CURR_PART: continue')
+      qRaw='{"custom":True}'
+      #! добавить схлопывание в диалоги при `returnDialogs==True`
+      #! добавить извлечение данных при `returnFull==True`
+      _code('cDays+=1')
+      _code('l=len(CURR_PART')
+      _code('cAll+=l')
+      _code('yield date, (l, CURR_PART)')
+      #! строки ниже должны быть сдвинуты влево
+      _code("except Exception: __QUERY_ERROR_HANDLER(RUN.source, %s)"%qRaw)
+      _code("RUN.query=%s"%qRaw)
+      #
+      code[0]=code[0]%(
+         ('\n'+_tab*4)+('\n'+_tab*4).join(self.db._indentMultilineSource(_tab, pre)),
+         userId,
+      )
+      code=('\n'+_tab*5).join(self.db._indentMultilineSource(_tab, code))
+      code=self.db.query_pattern_clear_indent.sub('', code.strip('\n'))
 
+      print code
+      return
 
-
-
+      code+='\nRUN.source="""%s"""'%code
+      code=compile(code, self.db.query_envName, 'exec')
+      #~ сейчас в code полностью сформированный исходник, однако промежуток дат он берет из окружения - значит можно смело кешировать
+      return code
 
 
    def dialogFindEx(self, user, query, reverseSortDate=False, returnDialogs=True, returnFull=False):
-      userid=self.userId(user)
-      self.__queryCompile(userid, query)
+      userId=self.userId(user)
+      q=self.__queryCompile(userId, query)
+      # qFunc=self.db.query(q=q, env={
+      #    'G':(),
+      # })
 
