@@ -147,4 +147,26 @@ if __name__ == '__main__':
    #    print _.defects, raw_input()
    # print console.color.clearLast, i1, i2, i3, i4, sys.exit()
 
+   q={
+      'or':[
+         {'key':'label', 'value':'label1', 'match':'=='},
+         {'and':[
+            {'key':'label', 'value':'label2', 'match':'!='},
+            {'or':[
+               {'key':'from', 'value':'from1', 'match':'=='},
+               {'key':'from', 'value':'from2', 'match':'=='},
+               {'and':[
+                  {'key':'label', 'value':'label3', 'match':'!='},
+                  {'key':'from', 'value':'from3', 'match':'=='},
+               ]},
+               {'key':'label', 'value':'label4', 'match':'=='},
+            ]},
+         ]},
+         {'key':'from', 'value':'from4', 'match':'=='},
+         {'key':'from', 'value':'from5', 'match':'=='},
+      ]
+   }
+   MyEnv().store.dialogFindEx('John Smith', q)
+   sys.exit(0)
+
    MyEnv()()
