@@ -204,12 +204,21 @@ class ApiFilter(ApiBase):
 
       {
          'or':[
-            {'key':'KEY1', 'value':'test2', 'match':'=='},
+            {'key':'label', 'value':'label1', 'match':'=='},
             {'and':[
-               {'key':'KEY1', 'value':'test', 'match':'!='},
-               {'key':'KEY2', 'value':10, 'match':'=='},
+               {'key':'label', 'value':'label2', 'match':'!='},
+               {'or':[
+                  {'key':'from', 'value':'from1', 'match':'=='},
+                  {'key':'from', 'value':'from2', 'match':'=='},
+                  {'and':[
+                     {'key':'label', 'value':'label3', 'match':'!='},
+                     {'key':'from', 'value':'from3', 'match':'=='},
+                  ]},
+                  {'key':'label', 'value':'label4', 'match':'=='},
+               ]},
             ]},
-            {'key':'KEY3', 'value':100, 'match':'<='},
+            {'key':'from', 'value':'from4', 'match':'=='},
+            {'key':'from', 'value':'from5', 'match':'=='},
          ]
       }
 
