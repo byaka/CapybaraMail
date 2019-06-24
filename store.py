@@ -524,7 +524,7 @@ class StoreDB_dialogFinderEx(StoreDB):
       else:
          raise ValueError  #! fix
 
-   def __queryCompile(self, userId, query):
+   def __queryCompile(self, userId, query, stopDates, stopResults):
       _tab=' '*3
       pre=[]
       code=["""
@@ -573,7 +573,7 @@ class StoreDB_dialogFinderEx(StoreDB):
       return code
 
 
-   def dialogFindEx(self, user, query, reverseSortDate=False, returnDialogs=True, returnFull=False):
+   def dialogFindEx(self, user, query, stopDates=10, stopResults=10, reverseSortDate=False, returnDialogs=True, returnFull=False):
       userId=self.userId(user)
       q=self.__queryCompile(userId, query)
       # qFunc=self.db.query(q=q, env={

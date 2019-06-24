@@ -136,25 +136,23 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def messages(self, login, date=None, stopDates=10, stopResults=10, query=None, reverseSortDate=False, returnDialogs=True, returnTree=False, returnFull=False):
+   def messages(self, login, dates=None, limitDates=10, limitResults=10, query=None, returnDialogs=True, returnTree=False, returnFull=False):
       #? как сделать пагинацию? планировалась пагинация по датам и временным промежуткам - такая пагинация отлично разруливается на стороне филтрации и отлично оптимизирует поиск
       #? можно ли задавать смещение типа *дата* + N первых непустых дней. тогда для подгрузки следующих резудьатов нужно передать тотже запрос, но изменить дату на последнюю в запросе + 1
       #? этот вариант кажется приемлимым, остается понять как это реализовать оптимально на этапе филтрации.
       #? например такё
       #? сперва мы генерируем запрос на основе переданного конфига, в процессе ища начальную дату если по ней идет фильтрация. а затем идем по датам начиная он начальной и выполняем совокупность операций над сетами. после чего для найденных результатов если нужно происходит ресолвинг на уровень диалогов. полученный результат мерджим с предыдущими и считаем колво непустых дат и колва общих результатов - не пора ли остановиться.
       """
-      Filter messages by conditions. Results grouped by date, so you receive only results for passed dates.
+      Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
       :param str login: Login of accaunt.
-      :param tuple|int|datetime date: You will got results only for this dates.
+      :param tuple|int|date|none dates: Дата или даты, за которые ведется поиск. Для передачи промежутков дат используйте синтаксис `(date1, '+1', date2)`. Также возможно использовать формат `(date1, '+1', True)` - это эквиваленто перебору дат начиная с указанной и вплоть до последней в базе. Второй аргумент в промежутках задает направление перебора и шаг. Допускается использовать одновременно и промежутки дат и обычное перечисление. Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, либо через unixtimestamp (в этом случае информация о времени будет отброшена). Значение `None` эквивалетно `('today', '+1', True)` (defaults to None).
+      :param int limitDates: Ограничение на колво
+
+
       :param bool returnDialogs: If `True`, results will be grouped by dialogs.
       :param bool returnTree: Not implemented for now.
       :param bool returnFull: Switch results from dialog-ids and msg-ids only to full msgs.
-      :param tuple|none byLabel: Combination of labels (defaults to None).
-      :param tuple|none byDate: Combination of dates (defaults to None).
-      :param bool|none byUnread: Filter by unread-status or ignore if `none` (defaults to None).
-      :param tuple|none byFrom: Combination of sender's emails (defaults to None).
-      :param tuple|none byTo: Combination of recipient's emails (matched in `To`, `cc`, `bcc` fields) (defaults to None).
       :return tuple:
 
       :note:
@@ -193,7 +191,6 @@ class ApiFilter(ApiBase):
          )
 
       """
-      #! как реализовать `NOT` паттерны? они необходимы, но как их красиво задавать неясно
       #! в случае группировки по диалогам нужно отдельно передавать идентификаторы сообщений, которые попали под условия поиска - это позволит например автоматически развернуть эти сообщения при раскрытии диалога.
       pass
 
