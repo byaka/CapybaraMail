@@ -445,6 +445,7 @@ class StoreDB(StoreBase):
             data._MagicDictCold__freeze()
          yield name, data
 
+import textwrap
 class StoreDB_dialogFinderEx(StoreDB):
    __finderMatchMap={
       '==':'&',
@@ -524,46 +525,47 @@ class StoreDB_dialogFinderEx(StoreDB):
       else:
          raise ValueError  #! fix
 
-   def __queryCompile(self, userId, query, stopDates, stopResults):
+   def __queryCompile(self, userId, query):
       _tab=' '*3
       pre=[]
-      code=["""
-      def RUN():
-         try:
-            db_getLinked=DB.getLinked
-            db_get=DB.get
-            db_getBacklinks=DB.getBacklinks
-            db_iterBacklinks=DB.iterBacklinks
-            # PRE <<
-            %s
-            # >> PRE
-            cAll=cDays=0
-            g=DATES
-            for date, dateId in g:
-               IDS=('%s', 'node_date', dateId, 'node_msg')
-               CURR_PART=db_getLinked(IDS, strictMode=False, safeMode=True)"""]
-      _code=code.append
+      onIter=[]
       counter=defaultdict(int)
-      self.__queryCompile_forOp(pre.append, _code, counter, userId, None, (query,))
-      _code('if not CURR_PART: continue')
-      qRaw='{"custom":True}'
+      self.__queryCompile_forOp(pre.append, onIter.append, counter, userId, None, (query,))
+      #
+      qRaw='{"custom":"StoreDB_dialogFinderEx", "query":%r}'%query
+      onIter.append('if not CURR_PART: continue')
       #! добавить схлопывание в диалоги при `returnDialogs==True`
       #! добавить извлечение данных при `returnFull==True`
-      _code('cDays+=1')
-      _code('l=len(CURR_PART')
-      _code('cAll+=l')
-      _code('yield date, (l, CURR_PART)')
-      #! строки ниже должны быть сдвинуты влево
-      _code("except Exception: __QUERY_ERROR_HANDLER(RUN.source, %s)"%qRaw)
-      _code("RUN.query=%s"%qRaw)
+      onIter.append('l=len(CURR_PART')
+      onIter.append('cDays+=1')
+      onIter.append('cAll+=l')
+      onIter.append('yield date, (l, CURR_PART)')
       #
-      code[0]=code[0]%(
-         ('\n'+_tab*4)+('\n'+_tab*4).join(self.db._indentMultilineSource(_tab, pre)),
-         userId,
-      )
-      code=('\n'+_tab*5).join(self.db._indentMultilineSource(_tab, code))
-      code=self.db.query_pattern_clear_indent.sub('', code.strip('\n'))
-
+      code=["""
+         def RUN():
+            try:
+               db_getLinked=DB.getLinked
+               db_get=DB.get
+               db_getBacklinks=DB.getBacklinks
+               db_iterBacklinks=DB.iterBacklinks
+               # PRE <<
+               %s
+               # >> PRE
+               cAll=cDays=0
+               g=DATES
+               for date, dateId in g:
+                  IDS=('%s', 'node_date', dateId, 'node_msg')
+                  CURR_PART=db_getLinked(IDS, strictMode=False, safeMode=True)"""%(
+            ('\n'+_tab*5).join(self.db._indentMultilineSource(_tab, pre)),
+            userId),
+         ('\n'+_tab*6)+('\n'+_tab*6).join(self.db._indentMultilineSource(_tab, onIter)),
+         """
+            except Exception: __QUERY_ERROR_HANDLER(RUN.source, %s)
+         RUN.query=%s"""%(qRaw, qRaw),
+      ]
+      #
+      code=('').join(code)
+      code=textwrap.dedent(code)
       print code
       return
 
@@ -572,8 +574,7 @@ class StoreDB_dialogFinderEx(StoreDB):
       #~ сейчас в code полностью сформированный исходник, однако промежуток дат он берет из окружения - значит можно смело кешировать
       return code
 
-
-   def dialogFindEx(self, user, query, stopDates=10, stopResults=10, reverseSortDate=False, returnDialogs=True, returnFull=False):
+   def dialogFindEx(self, user, query, dates, limitDates=10, limitResults=10, reverseSortDate=False, returnDialogs=True, returnFull=False):
       userId=self.userId(user)
       q=self.__queryCompile(userId, query)
       # qFunc=self.db.query(q=q, env={

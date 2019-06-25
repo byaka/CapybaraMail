@@ -136,7 +136,7 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def messages(self, login, dates=None, limitDates=10, limitResults=10, query=None, returnDialogs=True, returnTree=False, returnFull=False):
+   def messages(self, login, dates=None, query=None, limitDates=10, limitResults=10, returnDialogs=True, returnTree=False, returnFull=False):
       #? как сделать пагинацию? планировалась пагинация по датам и временным промежуткам - такая пагинация отлично разруливается на стороне филтрации и отлично оптимизирует поиск
       #? можно ли задавать смещение типа *дата* + N первых непустых дней. тогда для подгрузки следующих резудьатов нужно передать тотже запрос, но изменить дату на последнюю в запросе + 1
       #? этот вариант кажется приемлимым, остается понять как это реализовать оптимально на этапе филтрации.
@@ -147,50 +147,17 @@ class ApiFilter(ApiBase):
 
       :param str login: Login of accaunt.
       :param tuple|int|date|none dates: Дата или даты, за которые ведется поиск. Для передачи промежутков дат используйте синтаксис `(date1, '+1', date2)`. Также возможно использовать формат `(date1, '+1', True)` - это эквиваленто перебору дат начиная с указанной и вплоть до последней в базе. Второй аргумент в промежутках задает направление перебора и шаг. Допускается использовать одновременно и промежутки дат и обычное перечисление. Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, либо через unixtimestamp (в этом случае информация о времени будет отброшена). Значение `None` эквивалетно `('today', '+1', True)` (defaults to None).
-      :param int limitDates: Ограничение на колво
 
+
+      :param int limitDates: Ограничение на колво
 
       :param bool returnDialogs: If `True`, results will be grouped by dialogs.
       :param bool returnTree: Not implemented for now.
       :param bool returnFull: Switch results from dialog-ids and msg-ids only to full msgs.
       :return tuple:
-
-      :note:
-         This method allows to filter with `AND` and `OR` conditions. Last level is interpreted as `OR`, and previous level is `AND`.
-
-      :note:
-         If you want to use nested label - pass ierarchy, joined with `/` like string.
-
-      :example:
-         >>> api.dialogs('user1',
-            byLabel=(('Label 1', 'Label 2'), ('Label 3/Label4',)),  # same as ('Label 1' or 'Label 2') and 'Label 3',
-            byUnread=True,  # only unread
-            byFrom=('myEmail1@test.com', 'myEmail2@test.com')  # 'myEmail1@test.com' or 'myEmail2@test.com'
-         )
-
-      :example:
-         >>> api.messagesFilter('user1', byFrom=('myEmail1@test.com',), returnDialogs=True, returnTree=False, returnFull=False)
-         ... (
-            ('dialog1', ('msg1', 'msg2', 'msg3')),
-            ('dialog2', ('msg1', 'msg2', 'msg3')),
-         )
-
-      :example:
-         >>> api.messagesFilter('user1', byFrom=('myEmail1@test.com',), returnDialogs=True, returnTree=False, returnFull=True)
-         ... (
-            ('dialog1', (
-               {'id':'msg1', 'from':'blahblah', 'subject':'blahblah'},
-               {'id':'msg2', 'from':'blahblah', 'subject':'blahblah'},
-               {'id':'msg3', 'from':'blahblah', 'subject':'blahblah'},
-            )),
-            ('dialog2', (
-               {'id':'msg1', 'from':'blahblah', 'subject':'blahblah'},
-               {'id':'msg2', 'from':'blahblah', 'subject':'blahblah'},
-               {'id':'msg3', 'from':'blahblah', 'subject':'blahblah'},
-            )),
-         )
-
       """
+      if dates is None:
+         dates=('today', '+1', True)
       #! в случае группировки по диалогам нужно отдельно передавать идентификаторы сообщений, которые попали под условия поиска - это позволит например автоматически развернуть эти сообщения при раскрытии диалога.
       pass
 
