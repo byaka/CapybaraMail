@@ -6,8 +6,9 @@ import mailparserEx
 class ImportMailMBox(object):
    _headers=('date', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'references', 'reply-to', 'archived-at', 'sender', 'x-gmail-labels', 'subject', 'delivered-to', 'return-path')
 
-   def __init__(self, path):
+   def __init__(self, path, skip=0):
       self.path=path
+      self.skip=skip
       self._headers_preprocess={
          'message-id':lambda s: s.replace('<', '').replace('>', ''),
          'in-reply-to':lambda s: s.replace('<', '').replace('>', ''),
@@ -37,16 +38,18 @@ class ImportMailMBox(object):
             headers[k]=m(headers[k])
       body=msg.body
       attachments=tuple(msg.attachments)
-      buffer*=0  #~ in PY2 no `list.clear()` but this is same
       return msg, headers, body, attachments
 
    def __iter__(self):
+      i=0
       with open(self.path, 'rb') as f:
          buffer=[]
          for line in f:
             if not line.startswith('From '): buffer.append(line)
-            else:
-               r=self._procMsg(buffer)
-               if r: yield r
+            elif buffer:
+               i+=1
+               if i>self.skip:
+                  yield self._procMsg(buffer)
+               buffer*=0  #~ in PY2 no `list.clear()` but this is same
          r=self._procMsg(buffer)
          if r: yield r

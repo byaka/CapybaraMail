@@ -6,7 +6,8 @@ from VombatiDB import errors as dbError
 
 from importMail import ImportMailMBox
 from store import StoreBase, StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx
-from errors import StoreError, AccessDeniedError
+import errors as storeError
+import api
 
 from libs.plainText import plaintext
 import textwrap
@@ -17,7 +18,9 @@ class MyEnv(object):
       self._autoLabel_inbox='Inbox'
       self.workspace=Workspace()
       self.store=ClassFactory(StoreBase, (StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx))(self.workspace)
+      self.api=ClassFactory(api.ApiBase, (api.ApiAccaunt, api.ApiLabel, api.ApiFilter))(self.workspace, store=self.store)
       self.store.start()
+      self.api.start()
 
    def listUsers(self):
       p=console.color.copy()
@@ -38,18 +41,24 @@ class MyEnv(object):
       for s in ((email,) if isinstance(email, (str, unicode)) else email):
          self.store.userSelfEmailAdd(user, s, name=user, strictMode=False)
 
-   def importData(self, user, path):
+   def importData(self, user, path, skip=0):
       if not os.path.isfile(path):
          raise ValueError('File not exists')
       self.store.userIsExist(user,needException=True)
-      importer=ImportMailMBox(path)
+      importer=ImportMailMBox(path, skip)
       msg=None
       if self._istty:
          print
          msg='%(clearLast)sImporting from %(bold)s'+path+'%(end)s: %%i'
          msg=msg%console.color
       for i, (msgObj, headers, body, attachments) in enumerate(importer):
-         self.addMsgIncoming(user, msgObj, body, headers, attachments)
+         try:
+            isIncoming=self.store._msgProc_isIncoming(user, headers, msgObj.raw, True)
+         except storeError.IncorrectInputError: continue
+         if isIncoming:
+            self.addMsgIncoming(user, msgObj, body, headers, attachments)
+         else:
+            self.addMsgOutgoing(user, msgObj, body, headers, attachments)
          if self._istty:
             print msg%(i+1)
             # raw_input('Success! Continue?')
@@ -73,20 +82,28 @@ class MyEnv(object):
       if extractMoreLabels:
          if headers.get('x-gmail-labels'):
             labels+=headers['x-gmail-labels']
-      self.store.msgAdd(user, body, headers, msgObj.raw, attachments=attachments, labels=labels, strictMode=True, allowCompress=True)
+      try:
+         self.store.msgAdd(user, body, headers, msgObj.raw, attachments=attachments, labels=labels, strictMode=True, allowCompress=True)
+      except storeError.NoMessageIdError:
+         print '='*30
+         print 'ERROR: no msg-id founded'
+         print msgObj.raw
+         print '='*30
+         print
 
    def show(self, branch=None, limit=None):
       showDB(self.store.db, branch=branch, limit=limit)
 
+   def stats(self):
+      showStats(self.store.db)
+
    def __call__(self):
       assert self._istty
-      scope={k:getattr(self, k) for k in dir(self) if not k.startswith('_')}
+      scope=globals().copy()
+      scope.update((k, getattr(self, k)) for k in dir(self) if not k.startswith('_'))
       console.interact(scope)
 
    def test_dialogs(self, min_msgs=2):
-      # self.store.db.query(
-      #    what=''
-      # )
       for idsDialog, _ in self.store.db.iterBranch((self.store.userId('John Smith'), 'node_dialog'), recursive=False):
          for idsDialogLinked, _ in self.store.db.iterBacklinks(idsDialog, recursive=False):
             lines=['DIALOG (%s)'%idsDialog[-1]]
@@ -110,6 +127,8 @@ class MyEnv(object):
                ))
             if len(lines)>=1+min_msgs*3:
                print '\n'.join(lines)
+
+
 
 if __name__ == '__main__':
    # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
@@ -147,26 +166,45 @@ if __name__ == '__main__':
    #    print _.defects, raw_input()
    # print console.color.clearLast, i1, i2, i3, i4, sys.exit()
 
-   q={
-      'or':[
-         {'key':'label', 'value':'label1', 'match':'=='},
-         {'and':[
-            {'key':'label', 'value':'label2', 'match':'!='},
-            {'or':[
-               {'key':'from', 'value':'from1', 'match':'=='},
-               {'key':'from', 'value':'from2', 'match':'=='},
-               {'and':[
-                  {'key':'label', 'value':'label3', 'match':'!='},
-                  {'key':'from', 'value':'from3', 'match':'=='},
-               ]},
-               {'key':'label', 'value':'label4', 'match':'=='},
-            ]},
-         ]},
-         {'key':'from', 'value':'from4', 'match':'=='},
-         {'key':'from', 'value':'from5', 'match':'=='},
-      ]
-   }
-   MyEnv().store.dialogFindEx('John Smith', q)
-   sys.exit(0)
+   # q={
+   #    'or':[
+   #       {'key':'label', 'value':'label1', 'match':'=='},
+   #       {'and':[
+   #          {'key':'label', 'value':'label2', 'match':'!='},
+   #          {'or':[
+   #             {'key':'from', 'value':'from1', 'match':'=='},
+   #             {'key':'from', 'value':'from2', 'match':'=='},
+   #             {'and':[
+   #                {'key':'label', 'value':'label3', 'match':'!='},
+   #                {'key':'from', 'value':'from3', 'match':'=='},
+   #             ]},
+   #             {'key':'label', 'value':'label4', 'match':'=='},
+   #          ]},
+   #       ]},
+   #       {'key':'from', 'value':'from4', 'match':'=='},
+   #       {'key':'from', 'value':'from5', 'match':'=='},
+   #    ]
+   # }
+   # MyEnv().store.dialogFindEx('John Smith', q)
+   # sys.exit(0)
 
-   MyEnv()()
+   o=MyEnv()
+
+   # o.show((u'user#john_smith', u'node_date', u'date#20170412', u'node_email'))
+
+   # for ids in o.store.db.getLinked((u'user#john_smith', u'node_date', u'date#20170412', u'node_email', u'email#mail@ajon.ru')):
+   #    print ids
+   # print '*'
+   # ids=o.store.msgFind_byMsg('John Smith', '075D1B0F-A99A-4377-B99A-9E059870D327@ajon.ru', date=None, strictMode=True)
+   # for ids in o.store.db.getBacklinks(ids):
+   #    print ids
+
+   for date, data, targets in o.api.filterMessages('John Smith',
+      dates=('today', '-1', True),
+      query={'or':[
+         {'key':'from', 'value':'mail@ajon.ru', 'match':'=='},
+      ]}, limitDates=2, limitResults=10, asDialogs=True, returnFull=True):
+      print date
+      print_r(data)
+      print targets
+      print '='*30

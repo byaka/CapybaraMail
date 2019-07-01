@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-__all__=['ERROR_MSG', 'CapybaraMailError', 'AccessDeniedError', 'StoreError']
-
 ERROR_MSG={
    # USER
    -101:'User already exist',

@@ -19,7 +19,7 @@ SCHEME=[
 
    ('node_problem', ('user', 'problem', False, False, False, False, True)),
 
-   ('problem', ('node_problem', None, {
+   ('problem', (['node_problem', 'msg'], None, {
       'name':'str',
       'descr':('str', 'none'),
    }, True, False, False, True)),
@@ -30,7 +30,7 @@ SCHEME=[
 
    ('email', (('node_email', 'node_self'), 'msg', {
       'name':('str', 'none'),
-   }, True, False, False, None)),
+   }, True, False, False, True)),
 
    ('node_date', ('user', 'date', False, False, False, False, True)),
 
@@ -43,7 +43,7 @@ SCHEME=[
    ('node_msg', ('date', 'msg', False, False, False, False, True)),
 
    #! ожидает #83 для ограничения вложенности только внутри диалогов
-   ('msg', (['node_msg', 'email', 'dialog', 'msg'], ['msg', 'label'], {
+   ('msg', (['node_msg', 'email', 'dialog', 'msg'], ['msg', 'label', 'problem'], {
       'subject':'str',
       'timestamp':'datetime',
       'isIncoming':'bool',
@@ -53,7 +53,7 @@ SCHEME=[
       'bcc':('tuple', 'none'),
       'replyTo':('str', 'none'),
       'returnPath':('str', 'none'),
-      'raw':'str',
+      '_raw':'str',
       'bodyPlain':('str', 'none'),
       'bodyHtml':('str', 'none'),
       'attachments':('tuple', 'none'),

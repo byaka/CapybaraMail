@@ -25,6 +25,7 @@ class StoreBase(object):
       self.inited=True
 
    def start(self, **kwargs):
+      if self.started: return
       self._settings=dict(self.settings)
       self.settings._MagicDictCold__freeze()
       self._supports=dict(self.supports)
@@ -112,7 +113,7 @@ class StoreDB(StoreBase):
 
    def _configureDB(self, reinitNamespaces):
       self.db.settings.store_flushOnChange=False
-      self.db.settings.ns_checkIndexOnConnect=True
+      self.db.settings.ns_checkIndexOnConnect=False
       self.db.settings.dataMerge_ex=True
       self.db.settings.dataMerge_deep=False
       self.db.settings.linkedChilds_default_do=False
@@ -149,10 +150,10 @@ class StoreDB(StoreBase):
       raise ValueError('Incorrect type')
 
    @staticmethod
-   def dialogId(index):
-      if isinstance(index, (str, unicode)) and index.startswith('dialog#'): return index
-      elif isinstance(index, int):
-         return 'dialog#%s'%index
+   def dialogId(dialog):
+      if isinstance(dialog, (str, unicode)) and dialog.startswith('dialog#'): return dialog
+      elif isinstance(dialog, int):
+         return 'dialog#%s'%dialog
       raise ValueError('Incorrect type')
 
    @staticmethod
@@ -233,7 +234,8 @@ class StoreDB(StoreBase):
       ids=(userId, 'node_self', emailId)
       return ids if self.db.isExist(ids) else False
 
-   def problemAdd(self, problem, descr=None, strictMode=False):
+   def problemAdd(self, user, problem, descr=None, strictMode=False):
+      userId=self.userId(user)
       problemId=self.problemId(problem)
       data={
          'name':problem,
@@ -275,17 +277,26 @@ class StoreDB(StoreBase):
       return ids
 
    def _msgProc_isIncoming(self, user, headers, raw, strictMode):
-      if 'from' in headers:
-         userId=self.userId(user)
+      try:
          s=headers['from'][0][1]
-         return not(self.userSelfEmailCheck(userId, s))
-         #! нужна также проверка, есть ли пользователь в адресатах и допо-хак на случай, если письмо было отправлено самому себе
-      else:
-         raise ValueError('No `from` field')  #! fix
+      except (IndexError, KeyError):
+         print '='*30
+         print 'ERROR: Cant read `from` header'
+         print raw
+         print '='*30
+         print
+         raise IncorrectInputError('Cant read `from` header')
+      userId=self.userId(user)
+      return not(self.userSelfEmailCheck(userId, s))
+      #! нужна также проверка, есть ли пользователь в адресатах и доп-хак на случай, если письмо было отправлено самому себе
 
    def _msgProc_members(self, user=NULL, dateIds=NULL, data=NULL, linkToMsg=NULL, headers=NULL, **kwargs):
       headers['to']=(headers.get('to') or [])+(headers.get('delivered-to') or [])
-      _need_unpack=set(('from', 'replyTo', 'returnPath'))
+      _need_unpack=set((
+         'from',
+         'replyTo',
+         'returnPath'
+      ))
       for i, k in enumerate((
          'from', 'to', 'cc', 'bcc',
          ('reply-to', 'replyTo'),
@@ -300,6 +311,7 @@ class StoreDB(StoreBase):
             data[k]=v[0][1]
          else:
             data[k]=tuple(_v[1] for _v in v)
+         #
          for vName, vEmail in v or ():
             if not vEmail: continue
             ids=self.emailAdd(user, vEmail, vName, strictMode=False)
@@ -308,17 +320,18 @@ class StoreDB(StoreBase):
                ids, strictMode=False, onlyIfExist=False)
             linkToMsg.append(ids)
 
-   def _msgProc_dialog(self, headers=NULL, user=NULL, userId=NULL, dateIds=NULL, linkToMsg=NULL, **kwargs):
+   def _msgProc_dialog(self, headers=NULL, user=NULL, userId=NULL, dateIds=NULL, linkToMsg=NULL, linkInMsg=NULL, **kwargs):
       replyTo=headers.get('in-reply-to')
       if not replyTo:
          replyTo=headers.get('references') or ''
          replyTo=tuple(s.strip() for s in replyTo.split(' ') if s.strip())
          if replyTo: replyTo=replyTo[-1]
-      ids=self.dialogFind_byMsg(user, replyTo, findPoint=True) if replyTo else False
+      ids=self.dialogFind_byMsg(user, replyTo, asThread=True) if replyTo else False
       if ids is False:
          if replyTo:
-            problemIds=self.problemAdd('Parent message missed')
-            linkToMsg.append(problemIds)
+
+            problemIds=self.problemAdd(userId, 'Parent message missed')
+            linkInMsg.append((problemIds[-1], problemIds))
          #
          ids=self.dialogAdd(userId)
          ids=self.db.link(
@@ -356,7 +369,7 @@ class StoreDB(StoreBase):
       msg=msg or headers.get('message-id')
       if not msg:
          raise NoMessageIdError()
-         if isinstance(msg, int): msg=str(msg)
+      if isinstance(msg, int): msg=str(msg)
       assert isinstance(msg, (str, unicode))
       assert isinstance(body, tuple) and len(body)==2
       #
@@ -366,7 +379,7 @@ class StoreDB(StoreBase):
          'subject':headers['subject'],
          'timestamp':headers['date'],
          'isIncoming':isIncoming,
-         'raw':'',  #! очень много места занимают, хорошо бы хранить их в файлах
+         '_raw':'',  #! очень много места занимают, хорошо бы хранить их в файлах
          'bodyPlain':bodyPlain,
          'bodyHtml':bodyHtml,
          'replyTo':None,
@@ -390,11 +403,11 @@ class StoreDB(StoreBase):
          self.db.set(msgIds, data, strictMode=strictMode, onlyIfExist=False)
       except dbError.ExistStatusMismatchError:
          #~ проверяем, если у письма в получателях более одного нашего ящика, то это просто дубликат пришедший на альтернативную почту.
-         #~ для верности также проверяем все поля кроме timestamp, body* и raw
-         print '-'*30
-         print data
-         print self.db.get(msgIds)
-         print '-'*30
+         #~ для верности также проверяем все поля кроме timestamp, body* и _raw
+         print '='*30
+         print 'ERROR: msg-id already exists'
+         print msgIds
+         print '='*30
          print
          return False
 
@@ -408,28 +421,90 @@ class StoreDB(StoreBase):
             ids, strictMode=False, onlyIfExist=False)
       return msgIds
 
-   def dialogFind_byMsg(self, user, msg, date=NULL, findPoint=False):
+   def dialogFind_byMsg(self, user, msg, date=None, asThread=False, strictMode=False):
+      msgId=self.msgId(msg)
+      ids=self.msgFind_byMsg(user, msgId, date, strictMode=strictMode)
+      if ids is None: return False
+      g=self.db.iterBacklinks(ids, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False)
+      for ids, _ in g:
+         if len(ids)>4 and ids[3]=='node_dialog' and ids[-1]==msgId:
+            return ids if asThread else ids[:5]
+      raise RuntimeError('Msg founded but no link to dialog')  #! fixme
+
+   def dialogGet(self, user, dialog, date=None, strictMode=False, returnProps=False):
+      if date is None:
+         ids=(self.userId(user), 'node_dialog', self.dialogId(dialog))
+         try:
+            g=self.db.iterBacklinks(ids, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False)
+         except dbError.NotExistError:
+            if not strictMode: return ()
+            raise
+         for ids, _ in g:
+            if len(ids)==5 and ids[3]=='node_dialog': break
+         else:
+            raise RuntimeError('Inconsistency')  #! fix
+      else:
+         ids=(self.userId(user), 'node_date', self.dateId(date), 'node_dialog', self.dialogId(dialog))
+         if not self.db.isExist(ids):
+            if not strictMode: return ()
+            else:
+               raise dbError.NotExistError(ids)
+      #
+      return self.dialogGet_byIds(ids, returnProps=returnProps)
+
+   def dialogGet_byIds(self, ids, props=None, returnProps=False):
+      g=self.db.iterBranch(ids, recursive=True, treeMode=True, safeMode=False, calcProperties=returnProps, skipLinkChecking=True, allowContextSwitch=False)
+      for ids, (props, l) in g:
+         yield (ids, props) if returnProps else ids
+
+   def msgGet(self, user, msg, date=None, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True):
+      ids=self.msgFind_byMsg(user, msg, date, strictMode=strictMode)
+      if not ids: return None
+      return self.msgGet_byIds(ids, strictMode=strictMode, onlyPublic=onlyPublic, resolveAttachments=resolveAttachments, andLabels=andLabels)
+
+   def msgFind_byMsg(self, user, msg, date=None, strictMode=False):
       #? можно ускорить для несуществующих в индексе добавив отдельный фильтр блума
       userId=self.userId(user)
       msgId=self.msgId(msg)
       idsSuf=('node_msg', msgId)
-      target=None
-      if date is NULL:
+      targetIds=None
+      if not date:
          for ids, (props, l) in self.db.iterBranch((userId, 'node_date'), recursive=False, safeMode=False, calcProperties=False, skipLinkChecking=True, allowContextSwitch=False):
             ids+=idsSuf
             if self.db.isExist(ids):
-               target=ids
+               targetIds=ids
                break
       else:
          ids=(userId, 'node_date', self.dateId(date))+idsSuf
          if self.db.isExist(ids):
-            target=ids
+            targetIds=ids
+      if targetIds is None:
+         if not strictMode: return None
+         else:
+            raise dbError.NotExistError(ids)
+      return targetIds
+
+   def msgGet_byIds(self, ids, props=None, strictMode=True, onlyPublic=False, resolveAttachments=False, andLabels=False):
+      if andLabels:
+         # получение данных сработает и по ссылке, но для лэйблов нужна прямая адресация
+         ids=self.db.resolveLink(ids)
       #
-      if target is None: return False
-      for ids, _ in self.db.iterBacklinks(target, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False):
-         if len(ids)>4 and ids[3]=='node_dialog' and ids[-1]==msgId:
-            return ids
-      raise RuntimeError('Msg founded but no link to dialog')  #! fixme
+      o=self.db.get(ids, existChecked=props, returnRaw=True, strictMode=strictMode)
+      if not strictMode and o is None:
+         return {}
+      res={k:v for k,v in o.iteritems() if k[0]!='_'} if onlyPublic else o.copy()
+      o['id']=ids[-1]
+      if resolveAttachments:
+         pass  #! fix
+      if andLabels:
+         #! после VombatiDB#99 можно будет передавать `branch` через аргумент `arg` и таким образом кешировать запрос
+         res['labels']=tuple(self.db.query(
+            branch=ids,
+            what='INDEX',
+            where='NS=="label"',
+            recursive=False,
+         ))
+      return res
 
    def userList(self, filterPrivateData=True, wrapMagic=True):
       g=self.db.query(
@@ -455,6 +530,7 @@ class StoreDB_dialogFinderEx(StoreDB):
    def __queryCompile_forKey(self, toPre, toIter, counter, userId, key, value, match):
       if match not in self.__finderMatchMap:
          raise ValueError('Unknown matching pattern')  #! fix
+      #! добавить проверку на пустой set
       if key=='label':
          counter['CHECK_WITH_label']+=1
          var='CHECK_WITH_label%i'%counter['CHECK_WITH_label']
@@ -463,8 +539,8 @@ class StoreDB_dialogFinderEx(StoreDB):
          counter['CHECK_WITH_from']+=1
          var='CHECK_WITH_from%i'%counter['CHECK_WITH_from']
          toPre("%s=set()"%var)
-         toPre("g=db_iterBacklinks(('%s', 'node_email', '%s'), recursive=False)"%(userId, self.emailId(value)))
-         toPre("%s.update(*(db_getLinked(ids, strictMode=False, safeMode=False) for ids in g if len(ids)==5 and ids[1]=='node_date'))"%var)
+         toPre("g=db_iterBacklinks(('%s', 'node_email', '%s'), recursive=False, safeMode=False, calcProperties=False, strictMode=False, allowContextSwitch=False)"%(userId, self.emailId(value)))
+         toPre("%s.update(*(db_getLinked(ids, strictMode=False, safeMode=False) for ids, _ in g if len(ids)==5 and ids[1]=='node_date'))"%var)
       elif key=='to':
          raise NotImplementedError
       elif key=='unreaded':
@@ -532,52 +608,102 @@ class StoreDB_dialogFinderEx(StoreDB):
       counter=defaultdict(int)
       self.__queryCompile_forOp(pre.append, onIter.append, counter, userId, None, (query,))
       #
-      qRaw='{"custom":"StoreDB_dialogFinderEx", "query":%r}'%query
-      onIter.append('if not CURR_PART: continue')
-      #! добавить схлопывание в диалоги при `returnDialogs==True`
-      #! добавить извлечение данных при `returnFull==True`
-      onIter.append('l=len(CURR_PART')
-      onIter.append('cDays+=1')
-      onIter.append('cAll+=l')
-      onIter.append('yield date, (l, CURR_PART)')
+      qRaw='{"custom":"StoreDB_dialogFinderEx", "query":%r, "limit":None}'%query
+      onIter.append('if CURR_PART: yield date, CURR_PART')
       #
       code=["""
          def RUN():
             try:
                db_getLinked=DB.getLinked
                db_get=DB.get
+               db_iterBranch=DB.iterBranch
                db_getBacklinks=DB.getBacklinks
                db_iterBacklinks=DB.iterBacklinks
                # PRE <<
                %s
                # >> PRE
                cAll=cDays=0
-               g=DATES
-               for date, dateId in g:
+               gDates=DATES
+               for date, dateId in gDates:
                   IDS=('%s', 'node_date', dateId, 'node_msg')
-                  CURR_PART=db_getLinked(IDS, strictMode=False, safeMode=True)"""%(
+                  CURR_PART=set(ids for ids, _ in db_iterBranch(IDS, strictMode=False, recursive=False, safeMode=False, calcProperties=False, skipLinkChecking=True, allowContextSwitch=False))"""%(
             ('\n'+_tab*5).join(self.db._indentMultilineSource(_tab, pre)),
             userId),
          ('\n'+_tab*6)+('\n'+_tab*6).join(self.db._indentMultilineSource(_tab, onIter)),
          """
-            except Exception: __QUERY_ERROR_HANDLER(RUN.source, %s)
-         RUN.query=%s"""%(qRaw, qRaw),
+            except Exception: __QUERY_ERROR_HANDLER(RUN.source, RUN.query)
+         RUN.query=%s"""%(qRaw),
       ]
       #
       code=('').join(code)
       code=textwrap.dedent(code)
-      print code
-      return
-
+      # code=fileGet('filter_source.py')
+      # fileWrite('filter_source.py', code)
       code+='\nRUN.source="""%s"""'%code
       code=compile(code, self.db.query_envName, 'exec')
-      #~ сейчас в code полностью сформированный исходник, однако промежуток дат он берет из окружения - значит можно смело кешировать
+      #~ сейчас в code полностью сформированный исходник, однако генератор дат он берет из окружения - значит можно смело кешировать и переиспользовать с другими датами
       return code
 
-   def dialogFindEx(self, user, query, dates, limitDates=10, limitResults=10, reverseSortDate=False, returnDialogs=True, returnFull=False):
-      userId=self.userId(user)
-      q=self.__queryCompile(userId, query)
-      # qFunc=self.db.query(q=q, env={
-      #    'G':(),
-      # })
+   def __queryDateIter(self, dates):
+      assert dates
+      assert isinstance(dates, (list, tuple))
+      _ptrnStr=(str, unicode)
+      _ptrnDate=datetime.date
+      _ptrnDatetime=datetime.datetime
+      _fromStr=datetime.datetime.strptime
+      _fromInt=datetime.date.fromtimestamp
+      _today=datetime.date.today()
+      _epo=_ptrnDate(1970, 1, 1)
+      _delta=datetime.timedelta
+      _yesterday=_today-_delta(days=1)
+      #! нужно получать максимальную и минимальную дату в базе и использовать это
+      _dateId=self.dateId
+      old=None
+      step=None
+      for s in dates:
+         if not s:
+            raise NotImplementedError  #! fix
+         elif isinstance(s, _ptrnStr):
+            s=s.lower()
+            if s=='today':
+               d=_today
+            elif s=='yesterday':
+               d=_yesterday
+            elif len(s)>1 and (s[0]=='+' or s[0]=='-'):
+               assert old and step is None
+               step=(s[0]=='+', int(s[1:]))
+               continue
+            else:
+               d=_fromStr(s, '%Y%m%d').date()
+         elif s is not True and s is not False and isinstance(s, int):
+            d=_fromInt(s)
+         elif isinstance(s, _ptrnDate):
+            d=s
+         elif isinstance(s, _ptrnDatetime):
+            d=s.date()
+         elif s is True and step is not None:
+            d=_today if step[0] else _epo
+         else:
+            raise IncorrectInputError('Incorrect date value `%s`: %s'%(s, e))
+         #
+         if step is None:
+            yield (d, _dateId(d))
+         elif old==d:
+            raise IncorrectInputError('Passed dateStart and dateEnd must not equal')
+         elif (old>d)==step[0]:
+            raise IncorrectInputError('Incorrect dateStart and dateEnd')
+         else:
+            r=step[0]
+            delta=(1 if r else -1)*_delta(days=step[1])
+            end, d=d, old+delta
+            while (d<=end if r else d>=end):
+               yield (d, _dateId(d))
+               d+=delta
+            step=None
+         old=d
 
+   def dialogFindEx(self, user, query, dates):
+      userId=self.userId(user)
+      dateIterator=self.__queryDateIter(dates)
+      q=self.__queryCompile(userId, query)
+      return self.db.query(q=q, env={'DATES':dateIterator})
