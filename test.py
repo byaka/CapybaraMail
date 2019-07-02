@@ -128,8 +128,6 @@ class MyEnv(object):
             if len(lines)>=1+min_msgs*3:
                print '\n'.join(lines)
 
-
-
 if __name__ == '__main__':
    # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
    # tMap=set()
