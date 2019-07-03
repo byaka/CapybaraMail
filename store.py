@@ -500,7 +500,7 @@ class StoreDB(StoreBase):
          #! после VombatiDB#99 можно будет передавать `branch` через аргумент `arg` и таким образом кешировать запрос
          res['labels']=tuple(self.db.query(
             branch=ids,
-            what='INDEX',
+            what='INDEX[1:]',
             where='NS=="label"',
             recursive=False,
          ))
