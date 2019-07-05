@@ -5,7 +5,7 @@ from VombatiDB import VombatiDB, showDB, showStats, Workspace
 from VombatiDB import errors as dbError
 
 from importMail import ImportMailMBox
-from store import StoreBase, StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx
+from store import StoreBase, StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx, StoreHashing_dummy
 import errors as storeError
 import api
 
@@ -17,8 +17,17 @@ class MyEnv(object):
       self._istty=console.inTerm()
       self._autoLabel_inbox='Inbox'
       self.workspace=Workspace()
-      self.store=ClassFactory(StoreBase, (StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx))(self.workspace)
-      self.api=ClassFactory(api.ApiBase, (api.ApiAccaunt, api.ApiLabel, api.ApiFilter))(self.workspace, store=self.store)
+      self.store=ClassFactory(StoreBase, (
+         StoreFilesLocal,
+         StoreHashing_dummy,
+         StoreDB,
+         StoreDB_dialogFinderEx,
+      ))(self.workspace)
+      self.api=ClassFactory(api.ApiBase, (
+         api.ApiAccaunt,
+         api.ApiLabel,
+         api.ApiFilter,
+      ))(self.workspace, store=self.store)
       self.store.start()
       self.api.start()
 

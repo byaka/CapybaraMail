@@ -3,7 +3,7 @@ from functionsex import *
 from VombatiDB import errors as dbError
 
 from errors import *
-from store import StoreBase, StoreDB, StoreFilesLocal
+from store import StoreBase, StoreDB, StoreFilesLocal, StoreDB_dialogFinderEx, StoreHashing_dummy
 
 class ApiBase(object):
    def __init__(self, workspace, **kwargs):
@@ -22,7 +22,12 @@ class ApiBase(object):
 
    def _inited(self, store=None, **kwargs):
       self.inited=True
-      self.store=store or ClassFactory(StoreBase, (StoreFilesLocal, StoreDB))(self.workspace)
+      self.store=store or ClassFactory(StoreBase, (
+         StoreFilesLocal,
+         StoreHashing_dummy,
+         StoreDB,
+         StoreDB_dialogFinderEx,
+      ))(self.workspace)
 
    def start(self, **kwargs):
       self._settings=dict(self.settings)
