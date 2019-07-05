@@ -97,6 +97,10 @@ class StoreFilesLocal(StoreFilesBase):
          else:
             return f.read()
 
+class StoreHashing_dummy(StoreBase):
+   def passwordHash(self, password):
+      return password
+
 class StoreDB(StoreBase):
    def _init(self, **kwargs):
       if not hasattr(self.workspace, 'dbPath'):
@@ -104,11 +108,13 @@ class StoreDB(StoreBase):
          self.workspace.dbPath=os.path.join(getScriptPath(real=True, f=__file__), 'db')
       self.settings.reinitNamespacesOnStart=True
       self.db=None
+      self.__authMap=None
       super(StoreDB, self)._init(**kwargs)
 
    def _start(self, **kwargs):
       self.db=VombatiDB(('NS', 'Columns', 'MatchableLinks', 'StorePersistentWithCache', 'Search'))(self.workspace, self.workspace.dbPath)
       self._configureDB(reinitNamespaces=self._settings['reinitNamespacesOnStart'])
+      self.__makeAuthMap()
       super(StoreDB, self)._start(**kwargs)
 
    def _configureDB(self, reinitNamespaces):
@@ -124,6 +130,12 @@ class StoreDB(StoreBase):
       self.db.connect()
       if reinitNamespaces:
          self.db.configureNS(SCHEME, andClear=True)
+
+   def __makeAuthMap(self):
+      self.__authMap=dict(self.db.query(
+         what='IDS[-1], DATA["_passwordHash"]',
+         recursive=False,
+      ))
 
    @staticmethod
    def userId(user):
@@ -182,6 +194,11 @@ class StoreDB(StoreBase):
             return 'problem#%s'%problem.lower().replace(' ', '_').replace('?', '?_').replace('+', '+_')
       raise ValueError('Incorrect type')
 
+   def authMap(self):
+      if self.__authMap is None:
+         raise ValueError('Auth-map not inited yet')  #! fix
+      return self.__authMap
+
    def userAdd(self, user, password, descr=None, avatar=None, strictMode=True):
       assert user and isinstance(user, (str, unicode))
       assert password and isinstance(password, (str, unicode))
@@ -193,7 +210,7 @@ class StoreDB(StoreBase):
       userId=self.userId(user)
       if self.db.isExist(userId):
          raise StoreError(-106)
-      passwordHash=password  #! здесь добавить хеширование
+      passwordHash=self.passwordHash(password)
       if avatar:
          s='%s_avatar'%self._fileNameNormalize(userId)
          avatar=self._fileSet(s, avatar, allowOverwrite=False, strictMode=True)
@@ -211,6 +228,7 @@ class StoreDB(StoreBase):
       self.db.set((userId, 'node_label'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_dialog'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_problem'), False, strictMode=False, onlyIfExist=False)
+      self.__authMap[userId]=passwordHash
       return ids
 
    def userIsExist(self, user, needException=False):
