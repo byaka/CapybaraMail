@@ -53,7 +53,7 @@ class ApiAccaunt(ApiBase):
       :param str|none avatar: Encoded to base64 image (defaults to None).
       :param tuple|none connector: Config for connectors (defaults to None).
       """
-      self.store.userAdd(login, password, descr=descr, avatar=avatar, strictMode=True)
+      return self.store.userAdd(login, password, descr=descr, avatar=avatar, strictMode=True)
 
    def connectorAdd(self, login, name, type, config, descr=None):
       """
@@ -147,8 +147,7 @@ class ApiFilter(ApiBase):
 
       :param str login: Login of accaunt.
       :param tuple|int|date|none dates: Дата или даты, за которые ведется поиск. Для передачи промежутков дат используйте синтаксис `(date1, '+1', date2)`, а для обратного порядка `(date1, '-1', date2)`. Также возможно использовать формат `(date1, '-1', True)` - это эквиваленто перебору дат начиная с указанной и вплоть до последней в базе. Второй аргумент в промежутках задает направление перебора и шаг. Допускается использовать одновременно и промежутки дат и обычное перечисление. Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, либо через unixtimestamp (в этом случае информация о времени будет отброшена). Значение `None` эквивалетно `('today', '+1', True)` (defaults to None).
-      :param dict query:
-
+      :param dict query: Запрос, состоящий из вложенных словарей и списков. Элементы запроса имеею следующий формат: `{'or':[..]}` являющийся логическим оператором **или** (где в список вложены иные операторы), `{'and':[..]}` являющийся логическим оператором **и** и `{'key':'key_name', 'match':'==', 'value':'value'}` задающий условие фильтрации. Поддерживается фильтрация по следующим ключам: **from**, **to**, **label**. Для атрибута `match` допускается также значение `!=`, ознаающиее **не равно**.
       :param int limitDates: Ограничение на количество не пустых дней в результатах.
       :param int limitResults: Ограничение на количество сообщений (или диалогов при `asDialogs==True`) в результатах.
       :param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации.
@@ -157,45 +156,60 @@ class ApiFilter(ApiBase):
 
       :note:
          Параметр limitResults не может разбить одну дату. Это значит, что если передать в него `10`, а в первой обработанной дате будет 100 писем - то все 100 вернутся в результат и поиск завершится.
-      """
-      """
-      {
-         'or':[
-            {'key':'label', 'value':'label1', 'match':'=='},
-            {'and':[
-               {'key':'label', 'value':'label2', 'match':'!='},
-               {'or':[
-                  {'key':'from', 'value':'from1', 'match':'=='},
-                  {'key':'from', 'value':'from2', 'match':'=='},
-                  {'and':[
-                     {'key':'label', 'value':'label3', 'match':'!='},
-                     {'key':'from', 'value':'from3', 'match':'=='},
+
+      :example:
+         msg.label == 'label1' or (
+            msg.label == 'label2' or(
+               msg.from == 'from1' or
+               msg.from == 'from2' or(
+                  msg.label == 'label3' and msg.from == 'from3'
+               )
+            )
+         ) or
+         msg.from == 'from4' or
+         msg.from == 'from5'
+
+
+         {
+            'or':[
+               {'key':'label', 'value':'label1', 'match':'=='},
+               {'and':[
+                  {'key':'label', 'value':'label2', 'match':'!='},
+                  {'or':[
+                     {'key':'from', 'value':'from1', 'match':'=='},
+                     {'key':'from', 'value':'from2', 'match':'=='},
+                     {'and':[
+                        {'key':'label', 'value':'label3', 'match':'!='},
+                        {'key':'from', 'value':'from3', 'match':'=='},
+                     ]},
+                     {'key':'label', 'value':'label4', 'match':'=='},
                   ]},
-                  {'key':'label', 'value':'label4', 'match':'=='},
                ]},
-            ]},
-            {'key':'from', 'value':'from4', 'match':'=='},
-            {'key':'from', 'value':'from5', 'match':'=='},
-         ]
-      }
+               {'key':'from', 'value':'from4', 'match':'=='},
+               {'key':'from', 'value':'from5', 'match':'=='},
+            ]
+         }
+
       """
       if dates is None:
          dates=('today', '-1', True)
       userId=self.store.userId(login)
       cD=cR=0
-      res=[]
+      resData=[]
+      resTargets=[] if asDialogs else None
       dialog_map=set() if asDialogs else None
       for date, data in self.store.dialogFindEx(userId, query, dates):
+         dateId=self.store.dateId(date)
          if asDialogs:
-            dateId=self.store.dateId(date)
             cM=0 if returnFull else len(data)
             targets, data=data, []
             targets=tuple(s[-1] for s in targets)
             for msg in targets:
                dialogIds=self.store.dialogFind_byMsg(userId, msg, date=dateId, asThread=False)
-               dialog=dialogIds[-1]
-               #! првоерить в диалогах локальный и глобальный AI
-               if dialog in dialog_map: continue  #! нет использования dialog_map
+               dialog=(dialogIds[-3], dialogIds[-1])
+               #! проверить какой в диалогах AI - локальный или глобальный, возможно нельзя так матчить в карте
+               if dialog in dialog_map: continue
+               dialog_map.add(dialog)
                if returnFull:
                   dialog=tuple(
                      self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True)
@@ -204,13 +218,16 @@ class ApiFilter(ApiBase):
                   )
                   cM+=len(dialog)
                data.append(dialog)
-            res.append((date, data, targets))
+            resTargets.extend(targets)
          else:
             cM=len(data)
             if returnFull:
-               data=self.store.msgGet(userId, data, date=date)
+               data=tuple(self.store.msgGet(userId, msg, date=dateId) for msg in data)
+            else:
+               data=tuple(data)
+         resData.append((date, data))
          #
          cD+=1
          cR+=cM
          if cD>limitDates or cR>limitResults: break
-      return res
+      return (resData, resTargets) if asDialogs else resData
