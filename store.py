@@ -6,6 +6,8 @@ from VombatiDB import errors as dbError
 from scheme import SCHEME
 from errors import *
 
+re_prepForId=re.compile(r'[^\w_]', re.U)
+
 class StoreBase(object):
    def __init__(self, workspace, **kwargs):
       self._main_app=sys.modules['__main__']
@@ -28,7 +30,7 @@ class StoreBase(object):
       if self.started: return
       self._settings=dict(self.settings)
       self.settings._MagicDictCold__freeze()
-      self._supports=dict(self.supports)
+      self._supports=defaultdict(bool, **self.supports)
       self.supports._MagicDictCold__freeze()
       self.settings_frozen=True
       self._start(**kwargs)
@@ -52,10 +54,10 @@ class StoreFilesBase(StoreBase):
          except Exception: pass
       return base64.urlsafe_b64encode(name)
 
-   def _fileSet(self, name, content, nameNormalized=False, allowOverwrite=False):
+   def _fileSet(self, prefix, name, content, nameNormalized=False, allowOverwrite=False):
       raise NotImplementedError
 
-   def _fileGet(self, name, nameNormalized=True, asGenerator=False):
+   def _fileGet(self, prefix, name, nameNormalized=True, asGenerator=False):
       raise NotImplementedError
 
 class StoreFilesLocal(StoreFilesBase):
@@ -65,7 +67,7 @@ class StoreFilesLocal(StoreFilesBase):
          os.makedirs(self.settings.fileStorePath)
       super(StoreFilesLocal, self)._init(**kwargs)
 
-   def _fileSet(self, name, content, nameNormalized=False, allowOverwrite=False, strictMode=False):
+   def _fileSet(self, prefix, name, content, nameNormalized=False, allowOverwrite=False, strictMode=False):
       assert isinstance(content, (str, unicode))
       # content=content.encode('utf-8')
       if nameNormalized: fn=name
@@ -81,7 +83,7 @@ class StoreFilesLocal(StoreFilesBase):
          f.write(content)
       return fn
 
-   def _fileGet(self, name, nameNormalized=True, asGenerator=False):
+   def _fileGet(self, prefix, name, nameNormalized=True, asGenerator=False):
       if nameNormalized: fn=name
       else:
          fn=self._fileNameNormalize(name)
@@ -101,12 +103,33 @@ class StoreHashing_dummy(StoreBase):
    def passwordHash(self, password):
       return password
 
+class StoreUtils(StoreBase):
+   def _init(self, **kwargs):
+      self.JT_prepDataForReturn={
+         (s1, s2):bind(self.prepDataForReturn, defaultsUpdate={'filterPrivateData':s1, 'wrapMagic':s2})
+         for s1, s2 in itertools.product((True, False), repeat=2)
+      }
+      super(StoreUtils, self)._init(**kwargs)
+
+   @staticmethod
+   def prepDataForReturn(data, filterPrivateData=True, wrapMagic=True):
+      if filterPrivateData:
+         data={k:v for k,v in data.iteritems() if not k.startswith('_')}
+      if wrapMagic:
+         data=MagicDictCold(data)
+         data._MagicDictCold__freeze()
+      return data
+
 class StoreDB(StoreBase):
    def _init(self, **kwargs):
+      self.___specialLabel=[
+         'unread',
+      ]
       if not hasattr(self.workspace, 'dbPath'):
          #! это жестко привязывает класс к использованию расширения `StorePersistentWithCache`
          self.workspace.dbPath=os.path.join(getScriptPath(real=True, f=__file__), 'db')
       self.settings.reinitNamespacesOnStart=True
+      self.supports.specialLabel_unread=True
       self.db=None
       self.__authMap=None
       super(StoreDB, self)._init(**kwargs)
@@ -142,15 +165,14 @@ class StoreDB(StoreBase):
       if isinstance(user, (str, unicode)):
          if user.startswith('user#'): return user
          else:
-            #! нужен более изящный способ замены
-            return 'user#%s'%user.lower().replace(' ', '_').replace('?', '?_').replace('+', '+_')
+            return u'user#%s'%re_prepForId.sub('_', user.lower())
       raise ValueError('Incorrect type')
 
    @staticmethod
    def dateId(date):
       if isinstance(date, (str, unicode)) and date.startswith('date#'): return date
       elif isinstance(date, (datetime.date, datetime.datetime)):
-         return 'date#'+date.strftime('%Y%m%d')
+         return u'date#'+date.strftime('%Y%m%d')
       raise ValueError('Incorrect type')
 
    @staticmethod
@@ -158,14 +180,14 @@ class StoreDB(StoreBase):
       if isinstance(email, (str, unicode)):
          if email.startswith('email#'): return email
          else:
-            return 'email#%s'%email
+            return u'email#%s'%email
       raise ValueError('Incorrect type')
 
    @staticmethod
    def dialogId(dialog):
       if isinstance(dialog, (str, unicode)) and dialog.startswith('dialog#'): return dialog
       elif isinstance(dialog, int):
-         return 'dialog#%s'%dialog
+         return u'dialog#%s'%dialog
       raise ValueError('Incorrect type')
 
    @staticmethod
@@ -173,8 +195,7 @@ class StoreDB(StoreBase):
       if isinstance(label, (str, unicode)):
          if label.startswith('label#'): return label
          else:
-            #! нужен более изящный способ замены
-            return 'label#%s'%label.lower().replace(' ', '_').replace('?', '?_').replace('+', '+_')
+            return u'label#%s'%re_prepForId.sub('_', label.lower())
       raise ValueError('Incorrect type')
 
    @staticmethod
@@ -182,7 +203,7 @@ class StoreDB(StoreBase):
       if isinstance(msg, (str, unicode)):
          if msg.startswith('msg#'): return msg
          else:
-            return 'msg#%s'%msg
+            return u'msg#%s'%msg
       raise ValueError('Incorrect type')
 
    @staticmethod
@@ -190,9 +211,19 @@ class StoreDB(StoreBase):
       if isinstance(problem, (str, unicode)):
          if problem.startswith('problem#'): return problem
          else:
-            #! нужен более изящный способ замены
-            return 'problem#%s'%problem.lower().replace(' ', '_').replace('?', '?_').replace('+', '+_')
+            return u'problem#%s'%re_prepForId.sub('_', problem.lower())
       raise ValueError('Incorrect type')
+
+   def ids2human(self, ids):
+      if ids and isinstance(ids, tuple): ids=ids[-1]
+      assert ids and isinstance(ids, (str, unicode))
+      ns, nsi=self.db._parseId2NS(ids, needNSO=False)
+      return nsi[1:]
+
+   def labelIds2human(self, ids):
+      assert isinstance(ids, tuple)
+      assert len(ids)>2 and ids[1]=='node_label'
+      return '/'.join(self.ids2human(s) for s in ids[2:])
 
    def authMap(self):
       if self.__authMap is None:
@@ -213,7 +244,7 @@ class StoreDB(StoreBase):
       passwordHash=self.passwordHash(password)
       if avatar:
          s='%s_avatar'%self._fileNameNormalize(userId)
-         avatar=self._fileSet(s, avatar, allowOverwrite=False, strictMode=True)
+         avatar=self._fileSet('avatar', s, avatar, allowOverwrite=False, strictMode=True)
       data={
          '_passwordHash':passwordHash,
          'isActive':True,
@@ -228,6 +259,8 @@ class StoreDB(StoreBase):
       self.db.set((userId, 'node_label'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_dialog'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_problem'), False, strictMode=False, onlyIfExist=False)
+      for l in self.___specialLabel:
+         self.labelAdd(userId, l, special=True, strictMode=True)
       self.__authMap[userId]=passwordHash
       return ids
 
@@ -265,7 +298,8 @@ class StoreDB(StoreBase):
       userId=self.userId(user)
       dateId=self.dateId(date)
       ids=self.db.set((userId, 'node_date', dateId), False, strictMode=strictMode, onlyIfExist=False)
-      self.db.set((userId, 'node_date', dateId, 'node_email'), False, strictMode=False, onlyIfExist=False)
+      self.db.set((userId, 'node_date', dateId, 'node_from'), False, strictMode=False, onlyIfExist=False)
+      self.db.set((userId, 'node_date', dateId, 'node_to'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_date', dateId, 'node_dialog'), False, strictMode=False, onlyIfExist=False)
       self.db.set((userId, 'node_date', dateId, 'node_msg'), False, strictMode=False, onlyIfExist=False)
       return ids
@@ -279,19 +313,27 @@ class StoreDB(StoreBase):
       userId=self.userId(user)
       return self.db.set((userId, 'node_dialog', 'dialog+'), False, strictMode=strictMode, onlyIfExist=False)
 
-   def labelAdd(self, user, label, descr=None, color=None, strictMode=False):
-      if not label:
-         raise ValueError  #! fix
+   def labelAdd(self, user, label, descr=None, color=None, special=False, strictMode=False):
+      assert label
+      if isinstance(label, (str, unicode)):
+         if '/' in label:
+            label=tuple(s.strip() for s in label.split('/') if s.strip())
+         else:
+            label=(label,)
+      else:
+         assert isinstance(label, tuple)
       userId=self.userId(user)
-      label=label if isinstance(label, tuple) else (label,)
       labelIds=tuple(self.labelId(l) for l in label)
       idsPref=(userId, 'node_label',)
-      data={'name':None, 'descr':None, 'color':None}
+      data={'descr':None, 'color':None, '_special':False}
       for i in xrange(len(labelIds)):
          if i==len(labelIds)-1:
-            data={'descr':descr, 'color':color}
+            data={'descr':descr, 'color':color, '_special':special}
+         ids=idsPref+labelIds[:i+1]
+         data['id']=self.labelIds2human(ids)
          data['name']=label[i]
-         ids=self.db.set(idsPref+labelIds[:i+1], data, strictMode=strictMode, onlyIfExist=False)
+         data['nameChain']='/'.join(label[:i+1])
+         ids=self.db.set(ids, data, strictMode=strictMode, onlyIfExist=False)
       return ids
 
    def _msgProc_isIncoming(self, user, headers, raw, strictMode):
@@ -304,37 +346,45 @@ class StoreDB(StoreBase):
          print '='*30
          print
          raise IncorrectInputError('Cant read `from` header')
+      #! нужна также проверка, есть ли пользователь в адресатах и доп-хак на случай, если письмо было отправлено самому себе
       userId=self.userId(user)
       return not(self.userSelfEmailCheck(userId, s))
-      #! нужна также проверка, есть ли пользователь в адресатах и доп-хак на случай, если письмо было отправлено самому себе
+
+   __map_members=['from', 'to', 'cc', 'bcc', 'reply-to', 'return-path']
+
+   __map_memberRename={
+      'reply-to':'replyTo',
+      'return-path':'returnPath',
+   }
+
+   __map_memberSingle=set((
+      'from',
+      'replyTo',
+      'returnPath'
+   ))
+
+   __map_memberLinkMsg={
+      'from':'node_from',
+      'to':'node_to',
+      'cc':'node_to',
+      'bcc':'node_to',
+   }
 
    def _msgProc_members(self, user=NULL, dateIds=NULL, data=NULL, linkToMsg=NULL, headers=NULL, **kwargs):
       headers['to']=(headers.get('to') or [])+(headers.get('delivered-to') or [])
-      _need_unpack=set((
-         'from',
-         'replyTo',
-         'returnPath'
-      ))
-      for i, k in enumerate((
-         'from', 'to', 'cc', 'bcc',
-         ('reply-to', 'replyTo'),
-         ('return-path', 'returnPath'),
-      )):
-         if isinstance(k, tuple): kk, k=k
-         else: kk=k
-         v=headers.get(kk) or None
+      for k in self.__map_members:
+         v=headers.get(k) or None
+         k=self.__map_memberRename.get(k, k)
          if not v:
             data[k]=None
-         elif k in _need_unpack:
-            data[k]=v[0][1]
          else:
-            data[k]=tuple(_v[1] for _v in v)
-         #
+            data[k]=v[0][1] if k in self.__map_memberSingle else tuple(_v[1] for _v in v)
+         if k not in self.__map_memberLinkMsg: continue
          for vName, vEmail in v or ():
             if not vEmail: continue
             ids=self.emailAdd(user, vEmail, vName, strictMode=False)
             ids=self.db.link(
-               dateIds+('node_email', ids[-1]),
+               dateIds+(self.__map_memberLinkMsg[k], ids[-1]),
                ids, strictMode=False, onlyIfExist=False)
             linkToMsg.append(ids)
 
@@ -357,14 +407,13 @@ class StoreDB(StoreBase):
             ids, strictMode=False, onlyIfExist=False)
       linkToMsg.append(ids)
 
-   def _msgProc_attachments(self, msg=NULL, attachments=NULL, strictMode=NULL, data=NULL, **kwargs):
+   def _msgProc_attachments(self, msg=NULL, msgNormalized=NULL, attachments=NULL, strictMode=NULL, data=NULL, **kwargs):
       if attachments:
          if not self._supports.get('file'):
             self.workspace.log(2, 'Saving files not supported')
          else:
-            n=self._fileNameNormalize(msg)
             for i, o in enumerate(attachments):
-               name='%s_%i'%(n, i+1)
+               name='%s_%i'%(msgNormalized, i+1)
                content=o.pop('payload')
                if o['binary']:
                   content=base64.b64decode(content)
@@ -374,7 +423,7 @@ class StoreDB(StoreBase):
                   except Exception: pass
                o.pop('binary', None)
                o.pop('content_transfer_encoding', None)
-               o['_store_fileId']=self._fileSet(name, content, nameNormalized=True, allowOverwrite=not(strictMode), strictMode=False)
+               o['_store_fileId']=self._fileSet('attachment', name, content, nameNormalized=True, allowOverwrite=not(strictMode), strictMode=False)
          data['attachments']=tuple(attachments) if not isinstance(attachments, tuple) else attachments
 
    def _msgProc_labels(self, userId=NULL, labels=NULL, linkInMsg=NULL, **kwargs):
@@ -393,11 +442,14 @@ class StoreDB(StoreBase):
       #
       isIncoming=self._msgProc_isIncoming(user, headers, raw, strictMode)
       bodyPlain, bodyHtml=body
+      msgNormalized=self._fileNameNormalize(msg)
+      rawStored=self._fileSet('raw', msgNormalized+'_raw', raw, nameNormalized=True, allowOverwrite=not(strictMode), strictMode=False)
       data={
+         'id':msg,
          'subject':headers['subject'],
          'timestamp':headers['date'],
          'isIncoming':isIncoming,
-         '_raw':'',  #! очень много места занимают, хорошо бы хранить их в файлах
+         '_raw':rawStored,
          'bodyPlain':bodyPlain,
          'bodyHtml':bodyHtml,
          'replyTo':None,
@@ -439,15 +491,18 @@ class StoreDB(StoreBase):
             ids, strictMode=False, onlyIfExist=False)
       return msgIds
 
+   def dialogFind_byMsgIds(self, user, ids, asThread=False, strictMode=False):
+      g=self.db.iterBacklinks(ids, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False)
+      for ids2, _ in g:
+         if len(ids2)>4 and ids2[3]=='node_dialog' and ids2[-1]==ids[-1]:
+            return ids2 if asThread else ids2[:5]
+      raise RuntimeError('Msg founded but no link to dialog')  #! fixme
+
    def dialogFind_byMsg(self, user, msg, date=None, asThread=False, strictMode=False):
       msgId=self.msgId(msg)
       ids=self.msgFind_byMsg(user, msgId, date, strictMode=strictMode)
       if ids is None: return False
-      g=self.db.iterBacklinks(ids, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False)
-      for ids, _ in g:
-         if len(ids)>4 and ids[3]=='node_dialog' and ids[-1]==msgId:
-            return ids if asThread else ids[:5]
-      raise RuntimeError('Msg founded but no link to dialog')  #! fixme
+      return self.dialogFind_byMsgIds(user, ids, asThread=asThread, strictMode=strictMode)
 
    def dialogGet(self, user, dialog, date=None, strictMode=False, returnProps=False):
       if date is None:
@@ -502,41 +557,79 @@ class StoreDB(StoreBase):
             raise dbError.NotExistError(ids)
       return targetIds
 
-   def msgGet_byIds(self, ids, props=None, strictMode=True, onlyPublic=False, resolveAttachments=False, andLabels=False):
+   def msgGet_byIds(self, ids, props=None, strictMode=True, onlyPublic=False, resolveAttachments=False, andLabels=False, wrapMagic=True):
       if andLabels:
          # получение данных сработает и по ссылке, но для лэйблов нужна прямая адресация
          ids=self.db.resolveLink(ids)
       #
-      o=self.db.get(ids, existChecked=props, returnRaw=True, strictMode=strictMode)
-      if not strictMode and o is None:
+      res=self.db.get(ids, existChecked=props, returnRaw=True, strictMode=strictMode)
+      if not strictMode and res is None:
          return {}
-      res={k:v for k,v in o.iteritems() if k[0]!='_'} if onlyPublic else o.copy()
-      o['id']=ids[-1]
+      res=self.prepDataForReturn(res, filterPrivateData=onlyPublic, wrapMagic=wrapMagic)
       if resolveAttachments:
          pass  #! fix
       if andLabels:
-         #! после VombatiDB#99 можно будет передавать `branch` через аргумент `arg` и таким образом кешировать запрос
+         #! после VombatiDB#99 можно будет передавать `branch` через аргумент `env` и таким образом кешировать запрос
          res['labels']=tuple(self.db.query(
             branch=ids,
-            what='INDEX[1:]',
+            what='PREP_LABEL(DB.resolveLink(IDS))',
             where='NS=="label"',
             recursive=False,
+            env={
+               'PREP_LABEL':self.labelIds2human
+            }
          ))
       return res
 
-   def userList(self, filterPrivateData=True, wrapMagic=True):
-      g=self.db.query(
-         what='INDEX, DATA',
+   def userList(self, onlyPublic=True, wrapMagic=True):
+      return self.db.query(
+         what='INDEX[1:], PREP_DATA(DATA)',
          where='NS=="user"',
          recursive=False,
+         env={
+            'PREP_DATA':self.JT_prepDataForReturn[(onlyPublic, wrapMagic)]
+         }
       )
-      for name, data in g:
-         if filterPrivateData:
-            data={k:v for k,v in data.iteritems() if not k.startswith('_')}
-         if wrapMagic:
-            data=MagicDictCold(data)
-            data._MagicDictCold__freeze()
-         yield name, data
+
+   def labelList(self, user, countAll=True, countByLabel=None, byDialog=True, filterPrivateData=True, skipSpecial=True, wrapMagic=True):
+      what=['data={}']
+      pre=[]
+      if countByLabel:
+         if isinstance(countByLabel, (str, unicode)): countByLabel=(countByLabel,)
+         raise NotImplementedError
+      if countAll:
+         what.append('data["countAll"]=sum(1 for ids, _ in DB.iterBacklinks(IDS, PROPS, recursive=False, safeMode=False, calcProperties=False, allowContextSwitch=False) if ids[1]=="node_date")')
+      what.extend((
+         'data.update(DATA)',
+         'DATA=data',
+         'WHAT=(DATA["id"], PREP_DATA(DATA))',
+      ))
+      return self.db.query(
+         pre=pre,
+         what=what,
+         branch=(self.userId(user), 'node_label',),  #! после VombatiDB#99 можно будет передавать `branch` через аргумент `env` и таким образом кешировать запрос
+         where='not DATA["_special"]' if skipSpecial else None,
+         env={
+            'PREP_DATA':self.JT_prepDataForReturn[(filterPrivateData, wrapMagic)],
+            'PREP_LABEL':self.labelIds2human,
+            'PREP_IDS':self.ids2human,
+         }
+      )
+      # if not label:
+      #    raise ValueError  #! fix
+      # userId=self.userId(user)
+      # label=label if isinstance(label, tuple) else (label,)
+      # labelIds=tuple(self.labelId(l) for l in label)
+      # idsPref=(userId, 'node_label',)
+      # data={'name':None, 'descr':None, 'color':None}
+      # for i in xrange(len(labelIds)):
+      #    if i==len(labelIds)-1:
+      #       data={'descr':descr, 'color':color}
+      #    data['name']=label[i]
+      #    ids=self.db.set(idsPref+labelIds[:i+1], data, strictMode=strictMode, onlyIfExist=False)
+      # return ids
+      pass
+
 
 import textwrap
 class StoreDB_dialogFinderEx(StoreDB):
@@ -549,25 +642,21 @@ class StoreDB_dialogFinderEx(StoreDB):
       if match not in self.__finderMatchMap:
          raise ValueError('Unknown matching pattern')  #! fix
       #! добавить проверку на пустой set
+      comment="# OBJ.%s %s '%s'"%(key, match, value)
       if key=='label':
          counter['CHECK_WITH_label']+=1
          var='CHECK_WITH_label%i'%counter['CHECK_WITH_label']
-         toPre("%s=db_getBacklinks(('%s', 'node_label', '%s'), strictMode=False, safeMode=False)"%(var, userId, self.labelId(value)))
-      elif key=='from':
-         counter['CHECK_WITH_from']+=1
-         var='CHECK_WITH_from%i'%counter['CHECK_WITH_from']
-         toPre("%s=set()"%var)
-         toPre("g=db_iterBacklinks(('%s', 'node_email', '%s'), recursive=False, safeMode=False, calcProperties=False, strictMode=False, allowContextSwitch=False)"%(userId, self.emailId(value)))
-         toPre("%s.update(*(db_getLinked(ids, strictMode=False, safeMode=False) for ids, _ in g if len(ids)==5 and ids[1]=='node_date'))"%var)
-      elif key=='to':
-         raise NotImplementedError
-      elif key=='unreaded':
-         raise NotImplementedError
-      elif key=='date':
-         raise NotImplementedError
+         toPre("%s=set(ids[:-1] for ids, _ in db_iterBacklinks((%r, 'node_label', %r), recursive=False, safeMode=False, calcProperties=False, strictMode=False, allowContextSwitch=False) if ids[1]=='node_date')  %s"%(var, userId, self.labelId(value), comment))
+      elif key=='from' or key=='to':
+         s='to' if key=='to' else 'from'
+         counter['CHECK_WITH_'+s]+=1
+         var='CHECK_WITH_%s%i'%(s, counter['CHECK_WITH_'+s])
+         toPre("%s=set()  %s"%(var, comment))
+         toPre("g=db_iterBacklinks((%r, 'node_email', %r), recursive=False, safeMode=False, calcProperties=False, strictMode=False, allowContextSwitch=False)  %s"%(userId, self.emailId(value), comment))
+         toPre("%s.update(*(db_getLinked(ids, strictMode=False, safeMode=False) for ids, _ in g if len(ids)==5 and ids[1]=='node_date' and ids[3]=='node_%s'))  %s"%(var, s, comment))
       else:
          raise ValueError('Unknown key')  #! fix
-      toIter("CURR_PART %s= %s  # OBJ.%s %s '%s'"%(self.__finderMatchMap[match], var, key, match, value))
+      toIter("CURR_PART %s= %s  %s"%(self.__finderMatchMap[match], var, comment))
 
    def __queryCompile_forOp(self, toPre, toIter, counter, userId, op, conds):
       if not isinstance(conds, (list, tuple, types.GeneratorType)):
@@ -655,8 +744,8 @@ class StoreDB_dialogFinderEx(StoreDB):
       #
       code=('').join(code)
       code=textwrap.dedent(code)
-      # code=fileGet('filter_source.py')
-      # fileWrite('filter_source.py', code)
+      # code=fileGet('filter_source.py').decode('utf-8')
+      # fileWrite('filter_source.py', code.encode('utf-8'))
       code+='\nRUN.source="""%s"""'%code
       code=compile(code, self.db.query_envName, 'exec')
       #~ сейчас в code полностью сформированный исходник, однако генератор дат он берет из окружения - значит можно смело кешировать и переиспользовать с другими датами
@@ -671,10 +760,9 @@ class StoreDB_dialogFinderEx(StoreDB):
       _fromStr=datetime.datetime.strptime
       _fromInt=datetime.date.fromtimestamp
       _today=datetime.date.today()
-      _epo=_ptrnDate(1970, 1, 1)
+      _min=_ptrnDate(1970, 1, 1)  #! нужно получать минимальную дату в базе и использовать это
       _delta=datetime.timedelta
       _yesterday=_today-_delta(days=1)
-      #! нужно получать максимальную и минимальную дату в базе и использовать это
       _dateId=self.dateId
       old=None
       step=None
@@ -700,7 +788,7 @@ class StoreDB_dialogFinderEx(StoreDB):
          elif isinstance(s, _ptrnDatetime):
             d=s.date()
          elif s is True and step is not None:
-            d=_today if step[0] else _epo
+            d=_today if step[0] else _min
          else:
             raise IncorrectInputError('Incorrect date value `%s`: %s'%(s, e))
          #

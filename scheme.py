@@ -26,15 +26,19 @@ SCHEME=[
 
    ('node_self', ('user', 'email', False, False, False, False, True)),
 
-   ('node_email', (('user', 'date'), 'email', False, False, False, False, None)),
+   ('node_email', ('user', 'email', False, False, False, False, None)),
 
-   ('email', (('node_email', 'node_self'), 'msg', {
+   ('node_from', ('date', 'email', False, False, False, False, True)),
+
+   ('node_to', ('date', 'email', False, False, False, False, True)),
+
+   ('email', (('node_email', 'node_self', 'node_from', 'node_to'), 'msg', {
       'name':('str', 'none'),
    }, True, False, False, True)),
 
    ('node_date', ('user', 'date', False, False, False, False, True)),
 
-   ('date', ('node_date', ['node_email', 'node_dialog', 'node_msg'], False, True, True, False, None)),
+   ('date', ('node_date', ['node_from', 'node_to', 'node_dialog', 'node_msg'], False, True, True, False, None)),
 
    ('node_dialog', (['user', 'date'], 'dialog', False, False, False, True, None)),
 
@@ -44,6 +48,7 @@ SCHEME=[
 
    #! ожидает #83 для ограничения вложенности только внутри диалогов
    ('msg', (['node_msg', 'email', 'dialog', 'msg'], ['msg', 'label', 'problem'], {
+      'id':'str',
       'subject':'str',
       'timestamp':'datetime',
       'isIncoming':'bool',
@@ -62,7 +67,10 @@ SCHEME=[
    ('node_label', ('user', 'label', False, False, False, False, None)),
 
    ('label', (['node_label', 'label', 'msg'], ['label'], {
+      '_special':'bool',
+      'id':'str',
       'name':'str',
+      'nameChain':'str',
       'descr':('str', 'none'),
       'color':('str', 'none'),
    }, True, False, False, None)),

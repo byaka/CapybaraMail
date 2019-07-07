@@ -5,7 +5,6 @@ from VombatiDB import VombatiDB, showDB, showStats, Workspace
 from VombatiDB import errors as dbError
 
 from importMail import ImportMailMBox
-from store import StoreBase, StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx, StoreHashing_dummy
 import errors as storeError
 import api
 
@@ -17,12 +16,7 @@ class MyEnv(object):
       self._istty=console.inTerm()
       self._autoLabel_inbox='Inbox'
       self.workspace=Workspace()
-      self.store=ClassFactory(StoreBase, (
-         StoreFilesLocal,
-         StoreHashing_dummy,
-         StoreDB,
-         StoreDB_dialogFinderEx,
-      ))(self.workspace)
+      self.store=api.makeStoreClass()(self.workspace)
       self.api=ClassFactory(api.ApiBase, (
          api.ApiAccaunt,
          api.ApiLabel,
@@ -173,45 +167,19 @@ if __name__ == '__main__':
    #    print _.defects, raw_input()
    # print console.color.clearLast, i1, i2, i3, i4, sys.exit()
 
-   # q={
-   #    'or':[
-   #       {'key':'label', 'value':'label1', 'match':'=='},
-   #       {'and':[
-   #          {'key':'label', 'value':'label2', 'match':'!='},
-   #          {'or':[
-   #             {'key':'from', 'value':'from1', 'match':'=='},
-   #             {'key':'from', 'value':'from2', 'match':'=='},
-   #             {'and':[
-   #                {'key':'label', 'value':'label3', 'match':'!='},
-   #                {'key':'from', 'value':'from3', 'match':'=='},
-   #             ]},
-   #             {'key':'label', 'value':'label4', 'match':'=='},
-   #          ]},
-   #       ]},
-   #       {'key':'from', 'value':'from4', 'match':'=='},
-   #       {'key':'from', 'value':'from5', 'match':'=='},
-   #    ]
-   # }
-   # MyEnv().store.dialogFindEx('John Smith', q)
-   # sys.exit(0)
-
    o=MyEnv()
 
-   # o.show((u'user#john_smith', u'node_date', u'date#20170412', u'node_email'))
-
-   # for ids in o.store.db.getLinked((u'user#john_smith', u'node_date', u'date#20170412', u'node_email', u'email#mail@ajon.ru')):
-   #    print ids
-   # print '*'
-   # ids=o.store.msgFind_byMsg('John Smith', '075D1B0F-A99A-4377-B99A-9E059870D327@ajon.ru', date=None, strictMode=True)
-   # for ids in o.store.db.getBacklinks(ids):
-   #    print ids
-
-   for date, data, targets in o.api.filterMessages('John Smith',
+   data, targets=o.api.filterMessages('John Smith',
       dates=('today', '-1', True),
       query={'or':[
          {'key':'from', 'value':'mail@ajon.ru', 'match':'=='},
-      ]}, limitDates=2, limitResults=10, asDialogs=True, returnFull=True):
+         # {'key':'label', 'value':u'черновики', 'match':'=='},
+      ]},
+   limitDates=2, limitResults=10, asDialogs=True, returnFull=True)
+   for date, data in data:
       print date
       print_r(data)
-      print targets
       print '='*30
+   print targets
+
+   o()

@@ -3,7 +3,16 @@ from functionsex import *
 from VombatiDB import errors as dbError
 
 from errors import *
-from store import StoreBase, StoreDB, StoreFilesLocal, StoreDB_dialogFinderEx, StoreHashing_dummy
+from store import StoreBase, StoreFilesLocal, StoreDB, StoreDB_dialogFinderEx, StoreHashing_dummy, StoreUtils
+
+def makeStoreClass():
+   return ClassFactory(StoreBase, (
+      StoreUtils,
+      StoreFilesLocal,
+      StoreHashing_dummy,
+      StoreDB,
+      StoreDB_dialogFinderEx,
+   ))
 
 class ApiBase(object):
    def __init__(self, workspace, **kwargs):
@@ -22,12 +31,7 @@ class ApiBase(object):
 
    def _inited(self, store=None, **kwargs):
       self.inited=True
-      self.store=store or ClassFactory(StoreBase, (
-         StoreFilesLocal,
-         StoreHashing_dummy,
-         StoreDB,
-         StoreDB_dialogFinderEx,
-      ))(self.workspace)
+      self.store=store or makeStoreClass()(self.workspace)
 
    def start(self, **kwargs):
       self._settings=dict(self.settings)
@@ -87,29 +91,32 @@ class ApiAccaunt(ApiBase):
 
 class ApiLabel(ApiBase):
 
-   def labelList(self, login, count=True, unreadOnly=False, byDialog=True):
+   def labelList(self, login, countAll=True, countUnread=False, byDialog=True):
       """
-      List all labels, also count messages or dialogs in each (all and unread).
+      List all labels, also count messages or dialogs in each.
 
       :param str login: Login of accaunt.
-      :param bool count: Enable counting of messages or dialogs (defaults to True).
-      :param bool unreadOnly: Count only unreaded (defaults to False).
+      :param bool countAll: Enable counting of messages or dialogs (defaults to True).
+      :param bool countUnread: Count unread messages (defaults to False).
       :param bool byDialog: Count dialogs or messages (defaults to True).
       :return tuple:
 
       :note:
-         As labels may be nested, in this case it will be tuple (or join it with `/` and pass like string). Also parents not counts items in children.
+         As labels may be nested, in this case there name will be joined with `/` and pass like this.
+
+      :note:
+         Parents not counts items in children.
 
       :example:
-         >>> api.labelList('user1', count=True, unreadOnly=False)
+         >>> api.labelList('user1', countAll=True, countUnread=False)
          ... (
             {'name':'Label 1', 'descr':'Just non-nested label', 'color':'red', 'countAll':0, 'countUnread':0},
-            {'name':('Label 1', 'Label 2'), 'descr':'Just nested label', 'color':'#fff', 'countAll':10, 'countUnread':1},
-            {'name':('Label 1', 'Label 2', 'Label 3'), 'descr':'We need to go deeper', 'color':'green', 'countAll':100, 'countUnread':3},
+            {'name':'Label 1/Label 2', 'descr':'Just nested label', 'color':'#fff', 'countAll':10, 'countUnread':1},
+            {'name':'Label 1/Label 2/Label 3', 'descr':'We need to go deeper', 'color':'green', 'countAll':100, 'countUnread':3},
 
          )
       """
-      pass
+      return tuple(self.store.labelList(login, countAll=countAll, countByLabel=('unread',) if countUnread else None, byDialog=byDialog))
 
    def labelAdd(self, login, label, descr=None, color=None):
       """
@@ -123,7 +130,7 @@ class ApiLabel(ApiBase):
       :note:
          If you want to create nested label - pass tuple of ierarchy or join it with `/` and pass like string.
       """
-      pass
+      return self.store.labelAdd(login, label, descr=descr, color=color, strictMode=False)
 
    def labelEdit(self, login, label, descr=None, color=None):
       """
@@ -202,17 +209,16 @@ class ApiFilter(ApiBase):
          dateId=self.store.dateId(date)
          if asDialogs:
             cM=0 if returnFull else len(data)
-            targets, data=data, []
-            targets=tuple(s[-1] for s in targets)
-            for msg in targets:
-               dialogIds=self.store.dialogFind_byMsg(userId, msg, date=dateId, asThread=False)
+            msgs, targets, data=data, [], []
+            for msgIds in msgs:
+               targets.append(self.store.ids2human(msgIds))
+               dialogIds=self.store.dialogFind_byMsgIds(userId, msgIds, asThread=False)
                dialog=(dialogIds[-3], dialogIds[-1])
-               #! проверить какой в диалогах AI - локальный или глобальный, возможно нельзя так матчить в карте
                if dialog in dialog_map: continue
                dialog_map.add(dialog)
                if returnFull:
                   dialog=tuple(
-                     self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True)
+                     self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True, wrapMagic=False)
                      for ids, props
                      in self.store.dialogGet_byIds(dialogIds, returnProps=True)
                   )
