@@ -591,14 +591,23 @@ class StoreDB(StoreBase):
          }
       )
 
-   def labelList(self, user, countAll=True, countByLabel=None, byDialog=True, filterPrivateData=True, skipSpecial=True, wrapMagic=True):
+   def labelList(self, user, countAll=True, countWithLabel=None, byDialog=True, filterPrivateData=True, skipSpecial=True, wrapMagic=True):
+      if byDialog:
+         raise NotImplementedError
+      userId=self.userId(user)
       what=['data={}']
       pre=[]
-      if countByLabel:
-         if isinstance(countByLabel, (str, unicode)): countByLabel=(countByLabel,)
-         raise NotImplementedError
-      if countAll:
-         what.append('data["countAll"]=sum(1 for ids, _ in DB.iterBacklinks(IDS, PROPS, recursive=False, safeMode=False, calcProperties=False, allowContextSwitch=False) if ids[1]=="node_date")')
+      if countWithLabel or countAll:
+         what.append('mapForCurrent=DB.iterBacklinks(IDS, PROPS, safeMode=False)')
+         if countWithLabel:
+            if isinstance(countWithLabel, (str, unicode)): countWithLabel=(countWithLabel,)
+            what.append('data["countWithLabel"]={}')
+            for l in countWithLabel:
+               v=re_prepForId.sub('_', l.lower())
+               pre.append('mapForLabel_%s=DB.getBacklinks(("%s", "node_label", "%s"), safeMode=False)'%(v, userId, self.labelId(l)))
+               what.append('data["countWithLabel"]["%s"]=len(None for ids in mapForCurrent&mapForLabel_%s if ids[1]=="node_date")'%(l, v))
+         if countAll:
+            what.append('data["countAll"]=len(None for ids in mapForCurrent if ids[1]=="node_date")')
       what.extend((
          'data.update(DATA)',
          'DATA=data',
@@ -607,7 +616,7 @@ class StoreDB(StoreBase):
       return self.db.query(
          pre=pre,
          what=what,
-         branch=(self.userId(user), 'node_label',),  #! после VombatiDB#99 можно будет передавать `branch` через аргумент `env` и таким образом кешировать запрос
+         branch=(userId, 'node_label',),  #! после VombatiDB#99 можно будет передавать `branch` через аргумент `env` и таким образом кешировать запрос
          where='not DATA["_special"]' if skipSpecial else None,
          env={
             'PREP_DATA':self.JT_prepDataForReturn[(filterPrivateData, wrapMagic)],
@@ -615,21 +624,6 @@ class StoreDB(StoreBase):
             'PREP_IDS':self.ids2human,
          }
       )
-      # if not label:
-      #    raise ValueError  #! fix
-      # userId=self.userId(user)
-      # label=label if isinstance(label, tuple) else (label,)
-      # labelIds=tuple(self.labelId(l) for l in label)
-      # idsPref=(userId, 'node_label',)
-      # data={'name':None, 'descr':None, 'color':None}
-      # for i in xrange(len(labelIds)):
-      #    if i==len(labelIds)-1:
-      #       data={'descr':descr, 'color':color}
-      #    data['name']=label[i]
-      #    ids=self.db.set(idsPref+labelIds[:i+1], data, strictMode=strictMode, onlyIfExist=False)
-      # return ids
-      pass
-
 
 import textwrap
 class StoreDB_dialogFinderEx(StoreDB):

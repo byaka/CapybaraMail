@@ -45,15 +45,15 @@ class ApiBase(object):
    def _start(self, **kwargs):
       self.store.start()
 
-class ApiAccaunt(ApiBase):
+class ApiAccount(ApiBase):
 
-   def accauntAdd(self, login, password, descr=None, avatar=None, connector=None):
+   def accountAdd(self, login, password, descr=None, avatar=None, connector=None):
       """
-      Add new accaunt.
+      Add new account.
 
-      :param str login: Login (name) of accaunt. This also will ID of accaunt. Can contain any letters - it will be normalized automatically.
-      :param str password: Password for accaunt.
-      :param str|none descr: Description of accaunt (defaults to None).
+      :param str login: Login (name) of account. This also will ID of account. Can contain any letters - it will be normalized automatically.
+      :param str password: Password for account.
+      :param str|none descr: Description of account (defaults to None).
       :param str|none avatar: Encoded to base64 image (defaults to None).
       :param tuple|none connector: Config for connectors (defaults to None).
       """
@@ -61,9 +61,9 @@ class ApiAccaunt(ApiBase):
 
    def connectorAdd(self, login, name, type, config, descr=None):
       """
-      Add connector to accaunt (usually connector needed for receive and send messages).
+      Add connector to account (usually connector needed for receive and send messages).
 
-      :param str login: Login of accaunt.
+      :param str login: Login of account.
       :param str name: Connector's name, will be ID of connector.
       :param str type: Type of connector, this will be used for find correct connector.
       :param dict config: Parameters for connector.
@@ -83,7 +83,7 @@ class ApiAccaunt(ApiBase):
       """
       Switch active-status of specific connector.
 
-      :param str login: Login of accaunt.
+      :param str login: Login of account.
       :param str name: Name of connector.
       :param bool|none to: New active-status. If `None`, it will switched to opposite status (defaults to None).
       """
@@ -91,13 +91,13 @@ class ApiAccaunt(ApiBase):
 
 class ApiLabel(ApiBase):
 
-   def labelList(self, login, countAll=True, countUnread=False, byDialog=True):
+   def labelList(self, login, countAll=True, countWithLabel=False, byDialog=True):
       """
       List all labels, also count messages or dialogs in each.
 
-      :param str login: Login of accaunt.
+      :param str login: Login of account.
       :param bool countAll: Enable counting of messages or dialogs (defaults to True).
-      :param bool countUnread: Count unread messages (defaults to False).
+      :param list countWithLabel: Count messages that also have this label (defaults to False).
       :param bool byDialog: Count dialogs or messages (defaults to True).
       :return tuple:
 
@@ -107,42 +107,72 @@ class ApiLabel(ApiBase):
       :note:
          Parents not counts items in children.
 
-      :example:
-         >>> api.labelList('user1', countAll=True, countUnread=False)
+      :note:
+         This method don't shows labels with `special==True`.
+
+      :example python:
+         >>> api.labelList('user1', countAll=True, countWithLabel=['unread'])
          ... (
-            {'name':'Label 1', 'descr':'Just non-nested label', 'color':'red', 'countAll':0, 'countUnread':0},
-            {'name':'Label 1/Label 2', 'descr':'Just nested label', 'color':'#fff', 'countAll':10, 'countUnread':1},
-            {'name':'Label 1/Label 2/Label 3', 'descr':'We need to go deeper', 'color':'green', 'countAll':100, 'countUnread':3},
+            {'name':'Label 1', 'descr':'Just non-nested label', 'color':'red', 'countAll':0, 'countWithLabel':{'unread':0}},
+            {'name':'Label 1/Label 2', 'descr':'Just nested label', 'color':'#fff', 'countAll':10, 'countWithLabel':{'unread':10}},
+            {'name':'Label 1/Label 2/Label 3', 'descr':'We need to go deeper', 'color':'green', 'countAll':100, 'countWithLabel':{'unread':3}},
 
          )
       """
-      return tuple(self.store.labelList(login, countAll=countAll, countByLabel=('unread',) if countUnread else None, byDialog=byDialog))
+      return tuple(self.store.labelList(login, countAll=countAll, countWithLabel=countWithLabel, byDialog=byDialog))
 
    def labelAdd(self, login, label, descr=None, color=None):
       """
-      Add new label to accaunt.
+      Add new label to account.
 
-      :param str login: Login of accaunt.
+      :param str login: Login of account.
       :param str|tuple label: Label name or full ierarchy of names (for nested labels).
       :param str|none descr: Description for label (defaults to None).
       :param str|none color: Any representation of color (defaults to None).
 
       :note:
-         If you want to create nested label - pass tuple of ierarchy or join it with `/` and pass like string.
+         If you want to work with nested label - pass tuple of ierarchy or join it with `/` and pass like string.
       """
       return self.store.labelAdd(login, label, descr=descr, color=color, strictMode=False)
 
    def labelEdit(self, login, label, descr=None, color=None):
       """
-      Edit existed label in accaunt.
+      Edit existed label in account.
 
-      :param str login: Login of accaunt.
+      :param str login: Login of account.
       :param str|tuple label: Label name or full ierarchy of names (for nested labels).
       :param str|none descr: Description for label (defaults to None).
       :param str|none color: Any representation of color (defaults to None).
 
       :note:
-         If you want to edit nested label - pass tuple of ierarchy.
+         If you want to work with nested label - pass tuple of ierarchy or join it with `/` and pass like string.
+      """
+      pass
+
+   def labelMark(self, login, msg, label, andClear=False):
+      """
+      Mark message with specific label(s) and optionally clear other labels from it.
+
+      :param str login: Login of account.
+      :param str msg: Message's id.
+      :param str|list|tuple|none label: Label's ids or `None`.
+      :param bool andClear: Also clear all other labels (defaults to False).
+
+      :note:
+         If you want to work with nested label - pass tuple of ierarchy or join it with `/` and pass like string.
+      """
+      pass
+
+   def labelUnmark(self, login, msg, label):
+      """
+      Remove specific label(s) from message.
+
+      :param str login: Login of account.
+      :param str msg: Message's id.
+      :param str|list|tuple|none label: Label's ids or `None`.
+
+      :note:
+         If you want to work with nested label - pass tuple of ierarchy or join it with `/` and pass like string.
       """
       pass
 
@@ -152,9 +182,9 @@ class ApiFilter(ApiBase):
       """
       Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
-      :param str login: Login of accaunt.
+      :param str login: Login of account.
       :param tuple|int|date|none dates: Дата или даты, за которые ведется поиск. Для передачи промежутков дат используйте синтаксис `(date1, '+1', date2)`, а для обратного порядка `(date1, '-1', date2)`. Также возможно использовать формат `(date1, '-1', True)` - это эквиваленто перебору дат начиная с указанной и вплоть до последней в базе. Второй аргумент в промежутках задает направление перебора и шаг. Допускается использовать одновременно и промежутки дат и обычное перечисление. Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, либо через unixtimestamp (в этом случае информация о времени будет отброшена). Значение `None` эквивалетно `('today', '+1', True)` (defaults to None).
-      :param dict query: Запрос, состоящий из вложенных словарей и списков. Элементы запроса имеею следующий формат: `{'or':[..]}` являющийся логическим оператором **или** (где в список вложены иные операторы), `{'and':[..]}` являющийся логическим оператором **и** и `{'key':'key_name', 'match':'==', 'value':'value'}` задающий условие фильтрации. Поддерживается фильтрация по следующим ключам: **from**, **to**, **label**. Для атрибута `match` допускается также значение `!=`, ознаающиее **не равно**.
+      :param dict query: Запрос, состоящий из вложенных словарей и списков. Элементы запроса имееют следующий формат: `{'or':[..]}` являющийся логическим оператором **или** (где в список вложены иные операторы), `{'and':[..]}` являющийся логическим оператором **и** и `{'key':'key_name', 'match':'==', 'value':'value'}` задающий условие фильтрации. Поддерживается фильтрация по следующим ключам: **from**, **to**, **label**. Для атрибута `match` допускается также значение `!=`, ознаающиее **не равно**.
       :param int limitDates: Ограничение на количество не пустых дней в результатах.
       :param int limitResults: Ограничение на количество сообщений (или диалогов при `asDialogs==True`) в результатах.
       :param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации.
@@ -164,19 +194,7 @@ class ApiFilter(ApiBase):
       :note:
          Параметр limitResults не может разбить одну дату. Это значит, что если передать в него `10`, а в первой обработанной дате будет 100 писем - то все 100 вернутся в результат и поиск завершится.
 
-      :example:
-         msg.label == 'label1' or (
-            msg.label == 'label2' or(
-               msg.from == 'from1' or
-               msg.from == 'from2' or(
-                  msg.label == 'label3' and msg.from == 'from3'
-               )
-            )
-         ) or
-         msg.from == 'from4' or
-         msg.from == 'from5'
-
-
+      :example python:
          {
             'or':[
                {'key':'label', 'value':'label1', 'match':'=='},
@@ -197,6 +215,18 @@ class ApiFilter(ApiBase):
             ]
          }
 
+         # query matchs for this
+
+         msg.label == 'label1' or (
+            msg.label == 'label2' or(
+               msg.from == 'from1' or
+               msg.from == 'from2' or(
+                  msg.label == 'label3' and msg.from == 'from3'
+               )
+            )
+         ) or
+         msg.from == 'from4' or
+         msg.from == 'from5'
       """
       if dates is None:
          dates=('today', '-1', True)

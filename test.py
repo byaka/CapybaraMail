@@ -106,6 +106,18 @@ class MyEnv(object):
       scope.update((k, getattr(self, k)) for k in dir(self) if not k.startswith('_'))
       console.interact(scope)
 
+   def test_filter(self, q, dates=None, limitDates=2, limitResults=10, asDialogs=True, returnFull=True):
+      data, targets=o.api.filterMessages('John Smith', dates=dates, query=q, limitDates=limitDates, limitResults=limitResults, asDialogs=asDialogs, returnFull=returnFull)
+      for date, data in data:
+         print date
+         # body=data['bodyPlain'] or plaintext(data['bodyHtml'], linebreaks=1, indentation=False)
+         # del data['bodyHtml']
+         # del data['bodyPlain']
+         print_r(data)
+         print '-'*30
+      print targets
+      print '='*30
+
    def test_dialogs(self, min_msgs=2):
       for idsDialog, _ in self.store.db.iterBranch((self.store.userId('John Smith'), 'node_dialog'), recursive=False):
          for idsDialogLinked, _ in self.store.db.iterBacklinks(idsDialog, recursive=False):
@@ -169,17 +181,9 @@ if __name__ == '__main__':
 
    o=MyEnv()
 
-   data, targets=o.api.filterMessages('John Smith',
-      dates=('today', '-1', True),
-      query={'or':[
-         {'key':'from', 'value':'mail@ajon.ru', 'match':'=='},
-         # {'key':'label', 'value':u'черновики', 'match':'=='},
-      ]},
-   limitDates=2, limitResults=10, asDialogs=True, returnFull=True)
-   for date, data in data:
-      print date
-      print_r(data)
-      print '='*30
-   print targets
+   o.test_filter({'or':[
+      {'key':'from', 'value':'mail@ajon.ru', 'match':'=='},
+      # {'key':'label', 'value':u'черновики', 'match':'=='},
+   ]})
 
    o()
