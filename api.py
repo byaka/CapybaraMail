@@ -58,6 +58,7 @@ class ApiAccount(ApiBase):
       :param tuple|none connector: Config for connectors (defaults to None).
       """
       return self.store.userAdd(login, password, descr=descr, avatar=avatar, strictMode=True)
+   accountAdd._noAuth=True
 
    def connectorAdd(self, login, name, type, config, descr=None):
       """

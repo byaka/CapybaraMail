@@ -8,24 +8,27 @@ class ApiWrapperBase(type):
    This Meta-Class wraps each public method of Api and do some protocol-specific magic or add authentication support.
 
    :note:
-      Auth can be disabled for whole class by attr `_apiWrappingDisable_auth`.
+      Auth can be disabled for whole class by attr `_noAuth`.
 
    :note:
-      Call-wrapping can be disabled for whole class by attr `_apiWrappingDisable_call`.
+      Call-wrapping can be disabled for whole class by attr `_noCall`.
    """
 
    def __new__(meta, className, bases, classDict):
+      _noAuth=classDict.get('_noAuth', False)
+      _noCall=classDict.get('_noCall', False)
       for k, v in classDict.items():
          if not k.startswith('_') and callable(v):
             classDict[k]=ApiWrapperBase.wrap(
                classDict, v,
-               disableAuth=classDict.get('_apiWrappingDisable_auth', False),
-               disableCall=classDict.get('_apiWrappingDisable_call', False),
+               disableAuth=getattr(v, '_noAuth', _noAuth),
+               disableCall=getattr(v, '_noCall', _noCall),
             )
       return type.__new__(meta, className, bases, classDict)
 
    @classmethod
    def wrap(cls, classDict, f, disableAuth=False, disableCall=False):
+      disableAuth, disableCall=cls._wrapping_before(classDict, f, disableAuth=False, disableCall=False)
       @functools.wraps(f)
       def fNew(self, *args, **kwargs):
          scope=cls._wrapped_pre({}, f, self, args, kwargs)
@@ -36,11 +39,15 @@ class ApiWrapperBase(type):
          else:
             return f(self, *args, **kwargs)
       fNew._original=f
-      fNew=cls._wrapping(classDict, fNew, f)
+      fNew=cls._wrapping_after(classDict, fNew, f)
       return fNew
 
    @classmethod
-   def _wrapping(cls, classDict, fNew, fOld):
+   def _wrapping_before(cls, classDict, fOld, disableAuth, disableCall):
+      return disableAuth, disableCall
+
+   @classmethod
+   def _wrapping_after(cls, classDict, fNew, fOld):
       return fNew
 
    @classmethod
@@ -62,7 +69,13 @@ class ApiWrapperJSONRPC(ApiWrapperBase):
    #~ это имплементация под https://pypi.org/project/json-rpc/
 
    @classmethod
-   def _wrapping(cls, classDict, fNew, fOld):
+   def _wrapping_before(cls, classDict, fOld, disableAuth, disableCall):
+      if 'login' not in inspect.getargs(fOld.__code__)[0]:
+         disableAuth=False
+      return disableAuth, disableCall
+
+   @classmethod
+   def _wrapping_after(cls, classDict, fNew, fOld):
       if not hasattr(classDict, '_JSONRPC_dispatcherMap'):
          setattr(classDict, '_JSONRPC_dispatcherMap', dispatcher)
       classDict.dispatcher[fOld.__name__]=fNew

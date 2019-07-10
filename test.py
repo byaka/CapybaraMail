@@ -18,7 +18,7 @@ class MyEnv(object):
       self.workspace=Workspace()
       self.store=api.makeStoreClass()(self.workspace)
       self.api=ClassFactory(api.ApiBase, (
-         api.ApiAccaunt,
+         api.ApiAccount,
          api.ApiLabel,
          api.ApiFilter,
       ))(self.workspace, store=self.store)
