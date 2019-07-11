@@ -108,3 +108,5 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+/CapybaraMail.sublime-project
+/CapybaraMail.sublime-workspace
