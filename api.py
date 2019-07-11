@@ -179,7 +179,7 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False):
+   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False):
       """
       Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
@@ -202,6 +202,7 @@ class ApiFilter(ApiBase):
       :param int limitResults: Ограничение на количество сообщений (или диалогов при `asDialogs==True`) в результатах (defaults to 10).
       :param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации (defaults to True).
       :param bool returnFull: Позволяет получить сообщения целиком, а не только их идентификаторы (defaults to False).
+      :param bool onlyCount: Вместо самих диалогов (сообщений) возвращает количество.
       :return list:
 
       :note:
@@ -243,10 +244,11 @@ class ApiFilter(ApiBase):
       """
       if dates is None:
          dates=('today', '-1', True)
+      _needTargets=asDialogs and not onlyCount
       userId=self.store.userId(login)
       cD=cR=0
       resData=[]
-      resTargets=[] if asDialogs else None
+      resTargets=[] if _needTargets else None
       dialog_map=set() if asDialogs else None
       for date, data in self.store.dialogFindEx(userId, query, dates):
          dateId=self.store.dateId(date)
@@ -259,7 +261,7 @@ class ApiFilter(ApiBase):
                dialog=(dialogIds[-3], dialogIds[-1])
                if dialog in dialog_map: continue
                dialog_map.add(dialog)
-               if returnFull:
+               if returnFull and not onlyCount:
                   dialog=tuple(
                      self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True, wrapMagic=False)
                      for ids, props
@@ -267,16 +269,17 @@ class ApiFilter(ApiBase):
                   )
                   cM+=len(dialog)
                data.append(dialog)
-            resTargets.extend(targets)
+            if _needTargets:
+               resTargets.extend(targets)
          else:
             cM=len(data)
-            if returnFull:
+            if returnFull and not onlyCount:
                data=tuple(self.store.msgGet(userId, msg, date=dateId) for msg in data)
             else:
                data=tuple(data)
-         resData.append((date, data))
+         resData.append((date, len(data) if onlyCount else data))
          #
          cD+=1
          cR+=cM
          if cD>limitDates or cR>limitResults: break
-      return (resData, resTargets) if asDialogs else resData
+      return (resData, resTargets) if _needTargets else resData
