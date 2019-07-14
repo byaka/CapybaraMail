@@ -39,3 +39,15 @@ hr{
    margin-top: 10px !important;
    margin-bottom: 10px !important;
 }
+
+.section-type{
+   display: none !important;
+}
+
+.section-name{
+   font-weight: bold;
+}
+
+.callout .callout {
+   margin-left: 0px !important;
+}
