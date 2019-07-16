@@ -752,7 +752,6 @@ class StoreDB_dialogFinderEx(StoreDB):
       _ptrnDate=datetime.date
       _ptrnDatetime=datetime.datetime
       _fromStr=datetime.datetime.strptime
-      _fromInt=datetime.date.fromtimestamp
       _today=datetime.date.today()
       _min=_ptrnDate(1970, 1, 1)  #! нужно получать минимальную дату в базе и использовать это
       _delta=datetime.timedelta
@@ -769,34 +768,41 @@ class StoreDB_dialogFinderEx(StoreDB):
                d=_today
             elif s=='yesterday':
                d=_yesterday
-            elif len(s)>1 and (s[0]=='+' or s[0]=='-'):
-               assert old and step is None
-               step=(s[0]=='+', int(s[1:]))
-               continue
+            elif s.startswith('today'):
+               if '-' in s:
+                  ss, m='-', -1
+               elif '+' in s:
+                  ss, m='+', 1
+               else:
+                  raise ValueError  #! fix
+               s=m*int(s.split(ss, 1)[1])
+               d=_today+_delta(days=s)
             else:
                d=_fromStr(s, '%Y%m%d').date()
          elif s is not True and s is not False and isinstance(s, int):
-            d=_fromInt(s)
+            assert s
+            assert old and step is None
+            step=s
+            continue
          elif isinstance(s, _ptrnDate):
             d=s
          elif isinstance(s, _ptrnDatetime):
             d=s.date()
          elif s is True and step is not None:
-            d=_today if step[0] else _min
+            d=_today if step>0 else _min
          else:
-            raise IncorrectInputError('Incorrect date value `%s`: %s'%(s, e))
+            raise IncorrectInputError('Incorrect date value `%s`: %s'%(s, type(s)))
          #
          if step is None:
             yield (d, _dateId(d))
          elif old==d:
             raise IncorrectInputError('Passed dateStart and dateEnd must not equal')
-         elif (old>d)==step[0]:
+         elif (old>d)==step>0:
             raise IncorrectInputError('Incorrect dateStart and dateEnd')
          else:
-            r=step[0]
-            delta=(1 if r else -1)*_delta(days=step[1])
+            delta=_delta(days=step)
             end, d=d, old+delta
-            while (d<=end if r else d>=end):
+            while (d<=end if step>0 else d>=end):
                yield (d, _dateId(d))
                d+=delta
             step=None

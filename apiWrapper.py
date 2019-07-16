@@ -63,7 +63,7 @@ class ApiWrapperBase(type):
       return f(self, *args, **kwargs)
 
 
-#! поскольку библиотека оказалось негибкой и топорной, пока будем использовать flaskJSONRPCServer. Тогда на клиенте пока можно воспользоваться библиотекой `https://jsonrpcclient.readthedocs.io/en/latest/api.html`
+#! поскольку библиотека оказалось негибкой и топорной, пока будем использовать flaskJSONRPCServer. Тогда на клиенте пока можно воспользоваться библиотекой `https://jsonrpcclient.readthedocs.io/en/latest/api.html` или `jsonrpc-requests`
 
 from jsonrpc import dispatcher
 

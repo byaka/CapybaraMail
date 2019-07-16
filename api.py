@@ -184,13 +184,13 @@ class ApiFilter(ApiBase):
       Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
       :param str login: Login of account.
-      :param tuple|int|date|none dates:
+      :param tuple|str|date|none dates:
          Дата или даты, за которые ведется поиск.
          Для передачи промежутков дат используйте синтаксис `(date1, 1, date2)`, а для обратного порядка `(date1, -1, date2)`.
-         Также возможно использовать формат `(date1, -1, True)` - это эквиваленто перебору дат начиная с указанной и вплоть до последней в базе. Второй аргумент в промежутках задает направление перебора и шаг.
+         Также возможно использовать формат `(date1, -1, True)` - это эквиваленто перебору дат начиная с указанной и вплоть до самой старой в базе (при положительном шаге в качестве даты-конца будет использована сама новая дата в базе). Второй аргумент в промежутках задает направление перебора и шаг.
          Допускается использовать одновременно и промежутки дат и обычное перечисление.
-         Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, либо через unixtimestamp (в этом случае информация о времени будет отброшена).
-         Значение `None` эквивалетно `('today', 1, True)` (defaults to None).
+         Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, `today+1`, `today-4` (и так далее).
+         Значение `None` эквивалетно `('today', -1, True)` (defaults to None).
       :param dict query:
          Запрос, состоящий из вложенных словарей и списков. Элементы запроса имееют следующий формат:
             * `{'or':[..]}` являющийся логическим оператором **или** (где в список вложены иные операторы)
@@ -206,7 +206,7 @@ class ApiFilter(ApiBase):
       :return list:
 
       :note:
-         Параметр limitResults не может разбить одну дату. Это значит, что если передать в него `10`, а в первой обработанной дате будет 100 писем - то все 100 вернутся в результат и поиск завершится.
+         Параметр `limitResults` не может разбить одну дату. Это значит, что если передать `limitResults=10`, а за какуюто дату найдется 100 писем - то все 100 вернутся в результат и поиск завершится.
 
       :example python:
          {
@@ -262,13 +262,16 @@ class ApiFilter(ApiBase):
                dialog=(dialogIds[-3], dialogIds[-1])
                if dialog in dialog_map: continue
                dialog_map.add(dialog)
+               #? а может стоит возвращать айди диалога тоже?
                if returnFull and not onlyCount:
                   dialog=tuple(
                      self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True, wrapMagic=False)
                      for ids, props
                      in self.store.dialogGet_byIds(dialogIds, returnProps=True)
                   )
-                  cM+=len(dialog)
+               else:
+                  dialog=tuple(self.store.dialogGet_byIds(dialogIds, returnProps=False))
+               cM+=len(dialog)
                data.append(dialog)
             if _needTargets:
                resTargets.extend(targets)
