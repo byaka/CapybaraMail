@@ -242,7 +242,7 @@ class ApiFilter(ApiBase):
          msg.from == 'from4' or
          msg.from == 'from5'
       """
-      #! второй параметр в `dates` теперь не строка, а число со знаком - нужно переделать бэкенд
+      #! нужно возвращать пересчитанный диапозон для следующего поиска
       if dates is None:
          dates=('today', -1, True)
       _needTargets=asDialogs and not onlyCount
