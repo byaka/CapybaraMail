@@ -710,7 +710,7 @@ class StoreDB_dialogFinderEx(StoreDB):
       self.__queryCompile_forOp(pre.append, onIter.append, counter, userId, None, (query,))
       #
       qRaw='{"custom":"StoreDB_dialogFinderEx", "query":%r, "limit":None}'%query
-      onIter.append('if CURR_PART: yield date, CURR_PART')
+      onIter.append('if CURR_PART: yield date, CURR_PART, gDates')
       #
       code=["""
          def RUN():

@@ -179,7 +179,7 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False):
+   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, prepNextDates=True):
       """
       Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
@@ -251,7 +251,7 @@ class ApiFilter(ApiBase):
       resData=[]
       resTargets=[] if _needTargets else None
       dialog_map=set() if asDialogs else None
-      for date, data in self.store.dialogFindEx(userId, query, dates):
+      for date, data, g in self.store.dialogFindEx(userId, query, dates):
          dateId=self.store.dateId(date)
          if asDialogs:
             cM=0 if returnFull else len(data)
@@ -286,4 +286,7 @@ class ApiFilter(ApiBase):
          cD+=1
          cR+=cM
          if cD>limitDates or cR>limitResults: break
+      if prepNextDates:
+         # packing date-generator for next search
+         pass
       return (resData, resTargets) if _needTargets else resData
