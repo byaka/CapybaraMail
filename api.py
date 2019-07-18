@@ -179,7 +179,7 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, prepNextDates=True):
+   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, returnNextDates=True):
       """
       Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
@@ -202,7 +202,8 @@ class ApiFilter(ApiBase):
       :param int limitResults: Ограничение на количество сообщений (или диалогов при `asDialogs==True`) в результатах (defaults to 10).
       :param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации (defaults to True).
       :param bool returnFull: Позволяет получить сообщения целиком, а не только их идентификаторы (defaults to False).
-      :param bool onlyCount: Вместо самих диалогов (сообщений) возвращает количество.
+      :param bool onlyCount: Вместо самих диалогов (сообщений) возвращает количество (defaults to False).
+      :param bool returnNextDates: Добавляет в результаты модифицированный `dates`, в котором остались только необработанные даты из запрошенных. Работает с любыми комбинациями дат (defaults to True).
       :return list:
 
       :note:
@@ -242,7 +243,6 @@ class ApiFilter(ApiBase):
          msg.from == 'from4' or
          msg.from == 'from5'
       """
-      #! нужно возвращать пересчитанный диапозон для следующего поиска
       if dates is None:
          dates=('today', -1, True)
       _needTargets=asDialogs and not onlyCount
@@ -286,7 +286,8 @@ class ApiFilter(ApiBase):
          cD+=1
          cR+=cM
          if cD>limitDates or cR>limitResults: break
-      if prepNextDates:
-         # packing date-generator for next search
-         pass
-      return (resData, resTargets) if _needTargets else resData
+      r=(resData, resTargets) if _needTargets else (resData,)
+      if returnNextDates:
+         # extracting date-generator for next search
+         r+=(g.send(True),)
+      return r if len(r)>1 else r[0]

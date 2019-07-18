@@ -186,7 +186,7 @@ class StoreDB(StoreBase):
    @staticmethod
    def dialogId(dialog):
       if isinstance(dialog, (str, unicode)) and dialog.startswith('dialog#'): return dialog
-      elif isinstance(dialog, int):
+      elif isInt(dialog):
          return u'dialog#%s'%dialog
       raise ValueError('Incorrect type')
 
@@ -436,7 +436,7 @@ class StoreDB(StoreBase):
       msg=msg or headers.get('message-id')
       if not msg:
          raise NoMessageIdError()
-      if isinstance(msg, int): msg=str(msg)
+      if isInt(msg): msg=str(msg)
       assert isinstance(msg, (str, unicode))
       assert isinstance(body, tuple) and len(body)==2
       #
@@ -625,6 +625,9 @@ class StoreDB(StoreBase):
          }
       )
 
+def isInt(v):
+   return v is not True and v is not False and isinstance(v, int)
+
 import textwrap
 class StoreDB_dialogFinderEx(StoreDB):
    __finderMatchMap={
@@ -747,7 +750,8 @@ class StoreDB_dialogFinderEx(StoreDB):
 
    def __queryDateIter(self, dates):
       assert dates
-      assert isinstance(dates, (list, tuple))
+      if isinstance(dates, list): dates=tuple(dates)
+      assert dates and isinstance(dates, tuple)
       _ptrnStr=(str, unicode)
       _ptrnDate=datetime.date
       _ptrnDatetime=datetime.datetime
@@ -759,7 +763,8 @@ class StoreDB_dialogFinderEx(StoreDB):
       _dateId=self.dateId
       old=None
       step=None
-      for s in dates:
+      l=len(dates)
+      for i, s in enumerate(dates):
          if not s:
             raise NotImplementedError  #! fix
          elif isinstance(s, _ptrnStr):
@@ -779,7 +784,7 @@ class StoreDB_dialogFinderEx(StoreDB):
                d=_today+_delta(days=s)
             else:
                d=_fromStr(s, '%Y%m%d').date()
-         elif s is not True and s is not False and isinstance(s, int):
+         elif isInt(s):
             assert s
             assert old and step is None
             step=s
@@ -788,13 +793,23 @@ class StoreDB_dialogFinderEx(StoreDB):
             d=s
          elif isinstance(s, _ptrnDatetime):
             d=s.date()
-         elif s is True and step is not None:
+         elif s is True:
+            assert step is not None
             d=_today if step>0 else _min
          else:
             raise IncorrectInputError('Incorrect date value `%s`: %s'%(s, type(s)))
          #
          if step is None:
-            yield (d, _dateId(d))
+            cmd=yield (d, _dateId(d))
+            if cmd is True:
+               if i+1>=l:
+                  yield False
+               elif isInt(dates[i+1]):
+                  assert dates[i+1]
+                  assert old and step is None
+                  yield ((old+_delta(days=dates[i+1]).strftime('%Y%m%d')),)+dates[i+1:]
+               else:
+                  yield dates[i+1:]
          elif old==d:
             raise IncorrectInputError('Passed dateStart and dateEnd must not equal')
          elif (old>d)==step>0:
@@ -803,13 +818,18 @@ class StoreDB_dialogFinderEx(StoreDB):
             delta=_delta(days=step)
             end, d=d, old+delta
             while (d<=end if step>0 else d>=end):
-               yield (d, _dateId(d))
+               cmd=yield (d, _dateId(d))
                d+=delta
+               if cmd is True:
+                  if (d>end if step>0 else d<end):
+                     yield dates[i+1:] or False  # if we out-of-range, slice just returns empty tuple
+                  else:
+                     yield (d.strftime('%Y%m%d'), step, s)+dates[i+1:]  # if we out-of-range, slice just returns empty tuple
             step=None
          old=d
 
    def dialogFindEx(self, user, query, dates):
-      userId=self.userId(user)
       dateIterator=self.__queryDateIter(dates)
+      userId=self.userId(user)
       q=self.__queryCompile(userId, query)
       return self.db.query(q=q, env={'DATES':dateIterator})

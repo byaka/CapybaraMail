@@ -107,7 +107,7 @@ class MyEnv(object):
       console.interact(scope)
 
    def test_filter(self, q, dates=None, limitDates=2, limitResults=10, asDialogs=True, returnFull=True):
-      data, targets=o.api.filterMessages('John Smith', dates=dates, query=q, limitDates=limitDates, limitResults=limitResults, asDialogs=asDialogs, returnFull=returnFull)
+      data, targets, nextDates=o.api.filterMessages('John Smith', dates=dates, query=q, limitDates=limitDates, limitResults=limitResults, asDialogs=asDialogs, returnFull=returnFull)
       for date, data in data:
          print date
          # body=data['bodyPlain'] or plaintext(data['bodyHtml'], linebreaks=1, indentation=False)
@@ -115,7 +115,8 @@ class MyEnv(object):
          # del data['bodyPlain']
          print_r(data)
          print '-'*30
-      print targets
+      print 'TARGETS =', targets
+      print 'NEXT_DATES =', nextDates
       print '='*30
 
    def test_dialogs(self, min_msgs=2):

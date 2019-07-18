@@ -390,7 +390,8 @@
                               "limitResults":10,
                               "onlyCount":false,
                               "query":null,
-                              "returnFull":false
+                              "returnFull":false,
+                              "returnNextDates":true
                            },
                            "name":{
                               "asDialogs":6,
@@ -401,6 +402,7 @@
                               "onlyCount":8,
                               "query":3,
                               "returnFull":7,
+                              "returnNextDates":9,
                               "self":0
                            },
                            "order":[
@@ -412,16 +414,17 @@
                               "limitResults",
                               "asDialogs",
                               "returnFull",
-                              "onlyCount"
+                              "onlyCount",
+                              "returnNextDates"
                            ]
                         },
                         "attention":[],
                         "authors":[],
                         "copyright":"",
-                        "data":"filterMessages(login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False)",
+                        "data":"filterMessages(login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, returnNextDates=True)",
                         "descr":"Фильтрует сообщения по заданным критериям. Результаты группируются по датам.",
                         "directive":[],
-                        "docstr":"Фильтрует сообщения по заданным критериям. Результаты группируются по датам.\n\n:param str login: Login of account.\n:param tuple|str|date|none dates:\n   Дата или даты, за которые ведется поиск.\n   Для передачи промежутков дат используйте синтаксис `(date1, 1, date2)`, а для обратного порядка `(date1, -1, date2)`.\n   Также возможно использовать формат `(date1, -1, True)` - это эквиваленто перебору дат начиная с указанной и вплоть до самой старой в базе (при положительном шаге в качестве даты-конца будет использована сама новая дата в базе). Второй аргумент в промежутках задает направление перебора и шаг.\n   Допускается использовать одновременно и промежутки дат и обычное перечисление.\n   Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, `today+1`, `today-4` (и так далее).\n   Значение `None` эквивалетно `('today', -1, True)` (defaults to None).\n:param dict query:\n   Запрос, состоящий из вложенных словарей и списков. Элементы запроса имееют следующий формат:\n      * `{'or':[..]}` являющийся логическим оператором **или** (где в список вложены иные операторы)\n      * `{'and':[..]}` являющийся логическим оператором **и**\n      * `{'key':'key_name', 'match':'==', 'value':'value'}` задающий условие фильтрации.\n\n   Поддерживается фильтрация по следующим ключам: **from**, **to**, **label**. Для атрибута `match` допускается также значение `!=`, ознаающиее **не равно** (defaults to None).\n:param int limitDates: Ограничение на количество не пустых дней в результатах (defaults to 10).\n:param int limitResults: Ограничение на количество сообщений (или диалогов при `asDialogs==True`) в результатах (defaults to 10).\n:param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации (defaults to True).\n:param bool returnFull: Позволяет получить сообщения целиком, а не только их идентификаторы (defaults to False).\n:param bool onlyCount: Вместо самих диалогов (сообщений) возвращает количество.\n:return list:\n\n:note:\n   Параметр `limitResults` не может разбить одну дату. Это значит, что если передать `limitResults=10`, а за какуюто дату найдется 100 писем - то все 100 вернутся в результат и поиск завершится.\n\n:example python:\n   {\n      'or':[\n         {'key':'label', 'value':'label1', 'match':'=='},\n         {'and':[\n            {'key':'label', 'value':'label2', 'match':'!='},\n            {'or':[\n               {'key':'from', 'value':'from1', 'match':'=='},\n               {'key':'from', 'value':'from2', 'match':'=='},\n               {'and':[\n                  {'key':'label', 'value':'label3', 'match':'!='},\n                  {'key':'from', 'value':'from3', 'match':'=='},\n               ]},\n               {'key':'label', 'value':'label4', 'match':'=='},\n            ]},\n         ]},\n         {'key':'from', 'value':'from4', 'match':'=='},\n         {'key':'from', 'value':'from5', 'match':'=='},\n      ]\n   }\n\n   # query matchs for this\n\n   msg.label == 'label1' or (\n      msg.label == 'label2' or(\n         msg.from == 'from1' or\n         msg.from == 'from2' or(\n            msg.label == 'label3' and msg.from == 'from3'\n         )\n      )\n   ) or\n   msg.from == 'from4' or\n   msg.from == 'from5'",
+                        "docstr":"Фильтрует сообщения по заданным критериям. Результаты группируются по датам.\n\n:param str login: Login of account.\n:param tuple|str|date|none dates:\n   Дата или даты, за которые ведется поиск.\n   Для передачи промежутков дат используйте синтаксис `(date1, 1, date2)`, а для обратного порядка `(date1, -1, date2)`.\n   Также возможно использовать формат `(date1, -1, True)` - это эквиваленто перебору дат начиная с указанной и вплоть до самой старой в базе (при положительном шаге в качестве даты-конца будет использована сама новая дата в базе). Второй аргумент в промежутках задает направление перебора и шаг.\n   Допускается использовать одновременно и промежутки дат и обычное перечисление.\n   Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, `today+1`, `today-4` (и так далее).\n   Значение `None` эквивалетно `('today', -1, True)` (defaults to None).\n:param dict query:\n   Запрос, состоящий из вложенных словарей и списков. Элементы запроса имееют следующий формат:\n      * `{'or':[..]}` являющийся логическим оператором **или** (где в список вложены иные операторы)\n      * `{'and':[..]}` являющийся логическим оператором **и**\n      * `{'key':'key_name', 'match':'==', 'value':'value'}` задающий условие фильтрации.\n\n   Поддерживается фильтрация по следующим ключам: **from**, **to**, **label**. Для атрибута `match` допускается также значение `!=`, ознаающиее **не равно** (defaults to None).\n:param int limitDates: Ограничение на количество не пустых дней в результатах (defaults to 10).\n:param int limitResults: Ограничение на количество сообщений (или диалогов при `asDialogs==True`) в результатах (defaults to 10).\n:param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации (defaults to True).\n:param bool returnFull: Позволяет получить сообщения целиком, а не только их идентификаторы (defaults to False).\n:param bool onlyCount: Вместо самих диалогов (сообщений) возвращает количество (defaults to False).\n:param bool returnNextDates: Добавляет в результаты модифицированный `dates`, в котором остались только необработанные даты из запрошенных. Работает с любыми комбинациями дат (defaults to True).\n:return list:\n\n:note:\n   Параметр `limitResults` не может разбить одну дату. Это значит, что если передать `limitResults=10`, а за какуюто дату найдется 100 писем - то все 100 вернутся в результат и поиск завершится.\n\n:example python:\n   {\n      'or':[\n         {'key':'label', 'value':'label1', 'match':'=='},\n         {'and':[\n            {'key':'label', 'value':'label2', 'match':'!='},\n            {'or':[\n               {'key':'from', 'value':'from1', 'match':'=='},\n               {'key':'from', 'value':'from2', 'match':'=='},\n               {'and':[\n                  {'key':'label', 'value':'label3', 'match':'!='},\n                  {'key':'from', 'value':'from3', 'match':'=='},\n               ]},\n               {'key':'label', 'value':'label4', 'match':'=='},\n            ]},\n         ]},\n         {'key':'from', 'value':'from4', 'match':'=='},\n         {'key':'from', 'value':'from5', 'match':'=='},\n      ]\n   }\n\n   # query matchs for this\n\n   msg.label == 'label1' or (\n      msg.label == 'label2' or(\n         msg.from == 'from1' or\n         msg.from == 'from2' or(\n            msg.label == 'label3' and msg.from == 'from3'\n         )\n      )\n   ) or\n   msg.from == 'from4' or\n   msg.from == 'from5'",
                         "example":[
                            {
                               "data":"{\n'or':[\n{'key':'label', 'value':'label1', 'match':'=='},\n{'and':[\n{'key':'label', 'value':'label2', 'match':'!='},\n{'or':[\n{'key':'from', 'value':'from1', 'match':'=='},\n{'key':'from', 'value':'from2', 'match':'=='},\n{'and':[\n{'key':'label', 'value':'label3', 'match':'!='},\n{'key':'from', 'value':'from3', 'match':'=='},\n]},\n{'key':'label', 'value':'label4', 'match':'=='},\n]},\n]},\n{'key':'from', 'value':'from4', 'match':'=='},\n{'key':'from', 'value':'from5', 'match':'=='},\n]\n}\n\n# query matchs for this\n\nmsg.label == 'label1' or (\nmsg.label == 'label2' or(\nmsg.from == 'from1' or\nmsg.from == 'from2' or(\nmsg.label == 'label3' and msg.from == 'from3'\n)\n)\n) or\nmsg.from == 'from4' or\nmsg.from == 'from5'",
@@ -478,8 +481,13 @@
                               "type":"bool"
                            },
                            {
-                              "descr":"Вместо самих диалогов (сообщений) возвращает количество.",
+                              "descr":"Вместо самих диалогов (сообщений) возвращает количество (defaults to False).",
                               "name":"onlyCount",
+                              "type":"bool"
+                           },
+                           {
+                              "descr":"Добавляет в результаты модифицированный `dates`, в котором остались только необработанные даты из запрошенных. Работает с любыми комбинациями дат (defaults to True).",
+                              "name":"returnNextDates",
                               "type":"bool"
                            }
                         ],
