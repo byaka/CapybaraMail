@@ -14,17 +14,17 @@ class ApiWrapperBase(type):
       Call-wrapping can be disabled for whole class by attr `_noCall`.
    """
 
-   def __new__(meta, className, bases, classDict):
+   def __new__(cls, className, bases, classDict):
       _noAuth=classDict.get('_noAuth', False)
       _noCall=classDict.get('_noCall', False)
       for k, v in classDict.items():
          if not k.startswith('_') and callable(v):
-            classDict[k]=ApiWrapperBase.wrap(
+            classDict[k]=cls.wrap(
                classDict, v,
                disableAuth=getattr(v, '_noAuth', _noAuth),
                disableCall=getattr(v, '_noCall', _noCall),
             )
-      return type.__new__(meta, className, bases, classDict)
+      return type.__new__(cls, className, bases, classDict)
 
    @classmethod
    def wrap(cls, classDict, f, disableAuth=False, disableCall=False):
@@ -63,12 +63,7 @@ class ApiWrapperBase(type):
       return f(self, *args, **kwargs)
 
 
-#! поскольку библиотека оказалось негибкой и топорной, пока будем использовать flaskJSONRPCServer. Тогда на клиенте пока можно воспользоваться библиотекой `https://jsonrpcclient.readthedocs.io/en/latest/api.html` или `jsonrpc-requests`
-
-from jsonrpc import dispatcher
-
 class ApiWrapperJSONRPC(ApiWrapperBase):
-   #~ это имплементация под https://pypi.org/project/json-rpc/
 
    @classmethod
    def _wrapping_before(cls, classDict, fOld, disableAuth, disableCall):
@@ -76,12 +71,12 @@ class ApiWrapperJSONRPC(ApiWrapperBase):
          disableAuth=False
       return disableAuth, disableCall
 
-   @classmethod
-   def _wrapping_after(cls, classDict, fNew, fOld):
-      if not hasattr(classDict, '_JSONRPC_dispatcherMap'):
-         setattr(classDict, '_JSONRPC_dispatcherMap', dispatcher)
-      classDict.dispatcher[fOld.__name__]=fNew
-      return fNew
+   # @classmethod
+   # def _wrapping_after(cls, classDict, fNew, fOld):
+   #    if '_dispatcherMap' not in classDict:
+   #       classDict['_dispatcherMap']={}
+   #    classDict['_dispatcherMap'][fOld.__name__]=fNew
+   #    return fNew
 
    @classmethod
    def _prepBadResp(cls, e):
@@ -103,7 +98,7 @@ class ApiWrapperJSONRPC(ApiWrapperBase):
 
    @classmethod
    def _wrapped_pre(cls, scope, f, self, args, kwargs):
-      scope['conn']=kwargs.get('_conn', {})  #! это завязано на старом FJSONRPC протоколе
+      scope['conn']=kwargs.get('_conn', {})
       return scope
 
    @classmethod
