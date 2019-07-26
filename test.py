@@ -182,9 +182,9 @@ if __name__ == '__main__':
 
    o=MyEnv()
 
-   o.test_filter({'or':[
-      {'key':'from', 'value':'mail@ajon.ru', 'match':'=='},
-      # {'key':'label', 'value':u'черновики', 'match':'=='},
-   ]}, asDialogs=True, returnFull=False, limitDates=30, limitResults=100)
+   # o.test_filter({'or':[
+   #    {'key':'from', 'value':'mail@ajon.ru', 'match':'=='},
+   #    # {'key':'label', 'value':u'черновики', 'match':'=='},
+   # ]}, asDialogs=True, returnFull=False, limitDates=30, limitResults=100)
 
    o()

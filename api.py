@@ -251,6 +251,7 @@ class ApiFilter(ApiBase):
       resData=[]
       resTargets=[] if _needTargets else None
       dialog_map=set() if asDialogs else None
+      g=None
       for date, data, g in self.store.dialogFindEx(userId, query, dates):
          dateId=self.store.dateId(date)
          if asDialogs:
@@ -289,5 +290,5 @@ class ApiFilter(ApiBase):
       r=(resData, resTargets) if _needTargets else (resData,)
       if returnNextDates:
          # extracting date-generator for next search
-         r+=(g.send(True),)
+         r+=(g.send(True),) if g else ()
       return r if len(r)>1 else r[0]
