@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
+import traceback
 from functionsex import *
 
-from errors import *
+from errors import CapybaraMailError, ERROR_MSG
 
 class ApiWrapperBase(type):
    """
@@ -81,10 +82,10 @@ class ApiWrapperJSONRPC(ApiWrapperBase):
    @classmethod
    def _prepBadResp(cls, e):
       if isinstance(e, AssertionError):
-         return {'code':-6, 'data':ERROR_MSG[-6]}
+         return {'code':-6, 'data':'%s\n%s'%(ERROR_MSG[-6], traceback.format_exc())}
       elif isinstance(e, NotImplementedError):
-         return {'code':-1, 'data':ERROR_MSG[-1]}
-      elif isinstance(e, ScreendeskError):
+         return {'code':-1, 'data':'%s\n%s'%(ERROR_MSG[-1], traceback.format_exc())}
+      if isinstance(e, CapybaraMailError):
          return {'code':e.code, 'data':e.msg}
       else:
          return {'code':False, 'data':getErrorInfo(fallback=False)}
