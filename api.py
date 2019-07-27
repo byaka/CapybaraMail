@@ -290,5 +290,5 @@ class ApiFilter(ApiBase):
       r=(resData, resTargets) if _needTargets else (resData,)
       if returnNextDates:
          # extracting date-generator for next search
-         r+=(g.send(True),) if g else ()
+         r+=(g.send(True),) if g else (False,)
       return r if len(r)>1 else r[0]

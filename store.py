@@ -667,7 +667,9 @@ class StoreDB_dialogFinderEx(StoreDB):
          _toIter=tO.append
          #
          for o in conds:
-            if 'key' in o:
+            if not o:
+               _toIter('pass')
+            elif 'key' in o:
                self.__queryCompile_forKey(toPre, _toIter, counter, userId, o['key'], o['value'], o['match'])
             elif len(o)==1:
                self.__queryCompile_forOp(toPre, _toIter, counter, userId, *next(o.iteritems()))
@@ -675,7 +677,9 @@ class StoreDB_dialogFinderEx(StoreDB):
          toIter('# AND <<')
          #
          for o in conds:
-            if 'key' in o:
+            if not o:
+               _toIter('pass')
+            elif 'key' in o:
                self.__queryCompile_forKey(toPre, toIter, counter, userId, o['key'], o['value'], o['match'])
             elif len(o)==1:
                self.__queryCompile_forOp(toPre, toIter, counter, userId, *next(o.iteritems()))
@@ -696,7 +700,9 @@ class StoreDB_dialogFinderEx(StoreDB):
                _toIter=tO.append
             if i:
                _toIter('CURR_PART='+CURR_PART_BCK)
-            if 'key' in o:
+            if not o:
+               _toIter('pass')
+            elif 'key' in o:
                self.__queryCompile_forKey(toPre, _toIter, counter, userId, o['key'], o['value'], o['match'])
             elif len(o)==1:
                self.__queryCompile_forOp(toPre, _toIter, counter, userId, *next(o.iteritems()))
@@ -742,7 +748,7 @@ class StoreDB_dialogFinderEx(StoreDB):
       code=('').join(code)
       code=textwrap.dedent(code)
       # code=fileGet('filter_source.py').decode('utf-8')
-      # fileWrite('filter_source.py', code.encode('utf-8'))
+      fileWrite('filter_source.py', code.encode('utf-8'))
       code+='\nRUN.source="""%s"""'%code
       code=compile(code, self.db.query_envName, 'exec')
       #~ сейчас в code полностью сформированный исходник, однако генератор дат он берет из окружения - значит можно смело кешировать и переиспользовать с другими датами
@@ -806,8 +812,9 @@ class StoreDB_dialogFinderEx(StoreDB):
                   yield False
                elif isInt(dates[i+1]):
                   assert dates[i+1]
-                  assert old and step is None
-                  yield ((old+_delta(days=dates[i+1]).strftime('%Y%m%d')),)+dates[i+1:]
+                  old=d
+                  assert old and step is None, (dates, old, step, i)
+                  yield ((old+_delta(days=dates[i+1])).strftime('%Y%m%d'),)+dates[i+1:]
                else:
                   yield dates[i+1:]
          elif old==d:
