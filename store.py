@@ -397,7 +397,6 @@ class StoreDB(StoreBase):
       ids=self.dialogFind_byMsg(user, replyTo, asThread=True) if replyTo else False
       if ids is False:
          if replyTo:
-
             problemIds=self.problemAdd(userId, 'Parent message missed')
             linkInMsg.append((problemIds[-1], problemIds))
          #

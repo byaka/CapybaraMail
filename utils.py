@@ -26,48 +26,64 @@ URI_SCHEMES_PROVISIONAL=set((
 
 URI_SCHEMES = URI_SCHEMES_PERMANENT.union(URI_SCHEMES_PROVISIONAL)
 
-SQUISH_MIME_RULES = (
-   # IMPORTANT: Order matters a great deal here! Full mime-types should come
-   #         first, with the shortest codes preceding the longer ones.
-   ('text/plain', 'tp/'),
-   ('text/html', 'h/'),
-   ('application/zip', 'z/'),
-   ('application/json', 'j/'),
-   ('application/pdf', 'p/'),
-   ('application/rtf', 'r/'),
-   ('application/octet-stream', 'o/'),
-   ('application/msword', 'ms/d'),
-   ('application/vnd.ms-excel', 'ms/x'),
-   ('application/vnd.ms-access', 'ms/m'),
-   ('application/vnd.ms-powerpoint', 'ms/p'),
-   ('application/pgp-keys', 'pgp/k'),
-   ('application/pgp-signature', 'pgp/s'),
-   ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'ms/xx'),
-   ('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'ms/dx'),
-   ('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'ms/px'),
-   # These are prefixes that apply to many document types
-   ('application/vnd.openxmlformats-officedocument.', 'msx/'),
-   ('application/vnd.', 'vnd/'),
-   ('application/x-', 'x/'),
-   ('application/', '/'),
-   ('video/', 'v/'),
-   ('audio/', 'a/'),
-   ('image/', 'i/'),
-   ('text/', 't/'))
+# SQUISH_MIME_RULES = (
+#    # IMPORTANT: Order matters a great deal here! Full mime-types should come
+#    #         first, with the shortest codes preceding the longer ones.
+#    ('text/plain', 'tp/'),
+#    ('text/html', 'h/'),
+#    ('application/zip', 'z/'),
+#    ('application/json', 'j/'),
+#    ('application/pdf', 'p/'),
+#    ('application/rtf', 'r/'),
+#    ('application/octet-stream', 'o/'),
+#    ('application/msword', 'ms/d'),
+#    ('application/vnd.ms-excel', 'ms/x'),
+#    ('application/vnd.ms-access', 'ms/m'),
+#    ('application/vnd.ms-powerpoint', 'ms/p'),
+#    ('application/pgp-keys', 'pgp/k'),
+#    ('application/pgp-signature', 'pgp/s'),
+#    ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'ms/xx'),
+#    ('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'ms/dx'),
+#    ('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'ms/px'),
+#    # These are prefixes that apply to many document types
+#    ('application/vnd.openxmlformats-officedocument.', 'msx/'),
+#    ('application/vnd.', 'vnd/'),
+#    ('application/x-', 'x/'),
+#    ('application/', '/'),
+#    ('video/', 'v/'),
+#    ('audio/', 'a/'),
+#    ('image/', 'i/'),
+#    ('text/', 't/'))
 
 
-def squish_mimetype(mimetype):
-   for prefix, rep in SQUISH_MIME_RULES:
-      if mimetype.startswith(prefix):
-         return rep + mimetype[len(prefix):]
-   return mimetype
+# def squish_mimetype(mimetype):
+#    for prefix, rep in SQUISH_MIME_RULES:
+#       if mimetype.startswith(prefix):
+#          return rep + mimetype[len(prefix):]
+#    return mimetype
 
 
-def unsquish_mimetype(mimetype):
-   for prefix, rep in reversed(SQUISH_MIME_RULES):
-      if mimetype.startswith(rep):
-         return prefix + mimetype[len(rep):]
-   return mimetype
+# def unsquish_mimetype(mimetype):
+#    for prefix, rep in reversed(SQUISH_MIME_RULES):
+#       if mimetype.startswith(rep):
+#          return prefix + mimetype[len(rep):]
+#    return mimetype
 
+class RepairDialogLinking(object):
+   problemName='Parent message missed'
+   def __init__(self, store):
+      self.store=store
+
+   def count(self, user):
+      ids=(self.store.userId(user), 'node_problem', self.store.problemId(self.problemName))
+      return self.store.db.countBacklinks(ids)
+
+   def run(self, user):
+      userId=self.store.userId(user)
+      problemId=self.store.problemId(self.problemName)
+      ids=(userId, 'node_problem', problemId)
+      if not self.store.db.countBacklinks(ids): return
+      for idsCur, (propsCur, lCur) in self.store.db.iterBacklinks(ids, recursive=False, allowContextSwitch=False):
+         pass
 
 
