@@ -26,6 +26,9 @@ URI_SCHEMES_PROVISIONAL=set((
 
 URI_SCHEMES = URI_SCHEMES_PERMANENT.union(URI_SCHEMES_PROVISIONAL)
 
+def isInt(v):
+   return v is not True and v is not False and isinstance(v, int)
+
 # SQUISH_MIME_RULES = (
 #    # IMPORTANT: Order matters a great deal here! Full mime-types should come
 #    #         first, with the shortest codes preceding the longer ones.

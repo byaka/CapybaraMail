@@ -5,6 +5,7 @@ from VombatiDB import errors as dbError
 
 from scheme import SCHEME
 from errors import *
+from utils import isInt
 
 re_prepForId=re.compile(r'[^\w_]', re.U)
 
@@ -623,9 +624,6 @@ class StoreDB(StoreBase):
             'PREP_IDS':self.ids2human,
          }
       )
-
-def isInt(v):
-   return v is not True and v is not False and isinstance(v, int)
 
 import textwrap
 class StoreDB_dialogFinderEx(StoreDB):
