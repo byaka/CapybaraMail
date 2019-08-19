@@ -259,7 +259,7 @@ class ApiFilter(ApiBase):
             msgs, targets, data=data, [], []
             for msgIds in msgs:
                targets.append(self.store.ids2human(msgIds))
-               dialogIds=self.store.dialogFind_byMsgIds(userId, msgIds, asThread=False)
+               dialogIds=self.store.dialogFind_byMsgIds(msgIds, asThread=False)
                dialog=(dialogIds[-3], dialogIds[-1])
                if dialog in dialog_map: continue
                dialog_map.add(dialog)

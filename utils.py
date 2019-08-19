@@ -1,4 +1,44 @@
 # -*- coding: utf-8 -*-
+import sys, traceback
+
+from importMail import ImportMail_MBox
+
+IS_TTY=sys.stdout.isatty()
+consoleColor={
+   # predefined colors
+   'fail':'\x1b[91m',
+   'ok':'\x1b[92m',
+   'warning':'\x1b[93m',
+   'okblue':'\x1b[94m',
+   'header':'\x1b[95m',
+   # colors
+   'black':'\x1b[30m',
+   'red':'\x1b[31m',
+   'green':'\x1b[32m',
+   'yellow':'\x1b[33m',
+   'blue':'\x1b[34m',
+   'magenta':'\x1b[35m',
+   'cyan':'\x1b[36m',
+   'white':'\x1b[37m',
+   # background colors
+   'bgblack':'\x1b[40m',
+   'bgred':'\x1b[41m',
+   'bggreen':'\x1b[42m',
+   'bgyellow':'\x1b[43m',
+   'bgblue':'\x1b[44m',
+   'bgmagenta':'\x1b[45m',
+   'bgcyan':'\x1b[46m',
+   'bgwhite':'\x1b[47m',
+   # specials
+   'light':'\x1b[2m',
+   'bold':'\x1b[1m',
+   'inverse':'\x1b[7m',
+   'underline':'\x1b[4m',
+   'clearLast':'\x1b[F\x1b[K',
+   'end':'\x1b[0m'
+}
+if not IS_TTY:
+   consoleColor={k:'' for k in consoleColor}
 
 #? возможно эти данные есть в `email.MIMEImage`
 ATTACHMENT_TYPES={
@@ -75,18 +115,51 @@ def isInt(v):
 class RepairDialogLinking(object):
    problemName='Parent message missed'
    def __init__(self, store):
+      self.__msg_progress=consoleColor['clearLast']+'%i (%i missed) from %i'
       self.store=store
 
    def count(self, user):
       ids=(self.store.userId(user), 'node_problem', self.store.problemId(self.problemName))
       return self.store.db.countBacklinks(ids)
 
+   def find_broken_msgs_without_dialogs(self, user):
+      tArr=[]
+      g=self.store.db.iterBranch((self.store.userId(user), 'node_date'), strictMode=True, recursive=True, treeMode=True, safeMode=False, calcProperties=False, skipLinkChecking=True)
+      for ids, (props, l) in g:
+         if len(ids)<4: continue
+         if ids[3]!='node_msg': g.send(False)  # skip not-msgs nodes
+         if len(ids)>5: g.send(False)  # skip branch inside msgs
+         if len(ids)==5:
+            try:
+               self.store.dialogFind_byMsgIds(ids, strictMode=True, asThread=True)
+            except Exception:
+               tArr.append(ids)
+      return tArr
+
    def run(self, user):
       userId=self.store.userId(user)
       problemId=self.store.problemId(self.problemName)
       ids=(userId, 'node_problem', problemId)
-      if not self.store.db.countBacklinks(ids): return
+      c=self.store.db.countBacklinks(ids)
+      if not c: return
+      parser=ImportMail_MBox(None)
+      i1=i2=0
+      if IS_TTY: print
       for idsCur, (propsCur, lCur) in self.store.db.iterBacklinks(ids, recursive=False, allowContextSwitch=False):
-         pass
-
-
+         msgIds=idsCur[:-1]
+         msgId=idsCur[-2]
+         dateId=idsCur[-4]
+         idsFrom=self.store.dialogFind_byMsg(userId, msgId, date=dateId, asThread=True)
+         oldDialog=(userId, 'node_dialog', self.store.dialogId(self.store._thread2dialog(idsFrom, onlyDialog=True)))
+         data=self.store.msgGet(userId, msgId, date=dateId, strictMode=True, onlyPublic=False, resolveAttachments=False, andLabels=False)
+         raw=self.store._fileGet('raw', data['_raw'])
+         headers=parser._parseHeaders(parser._prepMsgObj(raw))
+         replyPoint=self.store._extract_replyPoint(headers)
+         idsTo=self.store.dialogFind_byMsg(userId, replyPoint, asThread=True)
+         if idsTo:
+            self.store.db.move(idsFrom, idsTo+(msgId,), onlyIfExist=True, strictMode=True, fixLinks=True, recursive=True)
+            self.store.db.remove(oldDialog)
+            self.store.db.remove(idsCur)
+            i1+=1
+         else: i2+=1
+         print self.__msg_progress%(i1, i2, c)

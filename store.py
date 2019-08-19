@@ -121,6 +121,12 @@ class StoreUtils(StoreBase):
          data._MagicDictCold__freeze()
       return data
 
+   def ids2human(self, ids):
+      if ids and isinstance(ids, tuple): ids=ids[-1]
+      assert ids and isinstance(ids, (str, unicode))
+      ns, nsi=self.db._parseId2NS(ids, needNSO=False)
+      return nsi[1:]
+
 class StoreDB(StoreBase):
    def _init(self, **kwargs):
       self.___specialLabel=[
@@ -186,8 +192,12 @@ class StoreDB(StoreBase):
 
    @staticmethod
    def dialogId(dialog):
-      if isinstance(dialog, (str, unicode)) and dialog.startswith('dialog#'): return dialog
-      elif isInt(dialog):
+      if isinstance(dialog, (str, unicode)):
+         if dialog.startswith('dialog#'): return dialog
+         else:
+            try: dialog=int(dialog)
+            except Exception: pass
+      if isInt(dialog):
          return u'dialog#%s'%dialog
       raise ValueError('Incorrect type')
 
@@ -215,16 +225,17 @@ class StoreDB(StoreBase):
             return u'problem#%s'%re_prepForId.sub('_', problem.lower())
       raise ValueError('Incorrect type')
 
-   def ids2human(self, ids):
-      if ids and isinstance(ids, tuple): ids=ids[-1]
-      assert ids and isinstance(ids, (str, unicode))
-      ns, nsi=self.db._parseId2NS(ids, needNSO=False)
-      return nsi[1:]
-
    def labelIds2human(self, ids):
       assert isinstance(ids, tuple)
       assert len(ids)>2 and ids[1]=='node_label'
       return '/'.join(self.ids2human(s) for s in ids[2:])
+
+   def _thread2dialog(self, ids, onlyDialog=False):
+      for i, s in enumerate(ids):
+         ns, nsi=self.db._parseId2NS(s, needNSO=False)
+         if ns=='dialog':
+            return nsi[1:] if onlyDialog else ids[:i+1]
+      return None
 
    def authMap(self):
       if self.__authMap is None:
@@ -389,15 +400,21 @@ class StoreDB(StoreBase):
                ids, strictMode=False, onlyIfExist=False)
             linkToMsg.append(ids)
 
-   def _msgProc_dialog(self, headers=NULL, user=NULL, userId=NULL, dateIds=NULL, linkToMsg=NULL, linkInMsg=NULL, **kwargs):
+   @staticmethod
+   def _extract_replyPoint(headers):
       replyTo=headers.get('in-reply-to')
       if not replyTo:
          replyTo=headers.get('references') or ''
          replyTo=tuple(s.strip() for s in replyTo.split(' ') if s.strip())
-         if replyTo: replyTo=replyTo[-1]
-      ids=self.dialogFind_byMsg(user, replyTo, asThread=True) if replyTo else False
-      if ids is False:
          if replyTo:
+            replyTo=replyTo[-1]
+      return replyTo
+
+   def _msgProc_dialog(self, headers=NULL, user=NULL, userId=NULL, dateIds=NULL, linkToMsg=NULL, linkInMsg=NULL, **kwargs):
+      replyPoint=self._extract_replyPoint(headers)
+      ids=self.dialogFind_byMsg(user, replyPoint, asThread=True) if replyPoint else False
+      if ids is False:
+         if replyPoint:
             problemIds=self.problemAdd(userId, 'Parent message missed')
             linkInMsg.append((problemIds[-1], problemIds))
          #
@@ -491,8 +508,8 @@ class StoreDB(StoreBase):
             ids, strictMode=False, onlyIfExist=False)
       return msgIds
 
-   def dialogFind_byMsgIds(self, user, ids, asThread=False, strictMode=False):
-      g=self.db.iterBacklinks(ids, recursive=False, safeMode=False, calcProperties=False, strictMode=True, allowContextSwitch=False)
+   def dialogFind_byMsgIds(self, ids, asThread=False, strictMode=False):
+      g=self.db.iterBacklinks(ids, recursive=False, safeMode=False, calcProperties=False, strictMode=strictMode, allowContextSwitch=False)
       for ids2, _ in g:
          if len(ids2)>4 and ids2[3]=='node_dialog' and ids2[-1]==ids[-1]:
             return ids2 if asThread else ids2[:5]
@@ -500,9 +517,10 @@ class StoreDB(StoreBase):
 
    def dialogFind_byMsg(self, user, msg, date=None, asThread=False, strictMode=False):
       msgId=self.msgId(msg)
-      ids=self.msgFind_byMsg(user, msgId, date, strictMode=strictMode)
+      userId=self.userId(user)
+      ids=self.msgFind_byMsg(userId, msgId, date, strictMode=strictMode)
       if ids is None: return False
-      return self.dialogFind_byMsgIds(user, ids, asThread=asThread, strictMode=strictMode)
+      return self.dialogFind_byMsgIds(ids, asThread=asThread, strictMode=strictMode)
 
    def dialogGet(self, user, dialog, date=None, strictMode=False, returnProps=False):
       if date is None:

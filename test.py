@@ -4,9 +4,10 @@ from functionsex import *
 from VombatiDB import VombatiDB, showDB, showStats, Workspace
 from VombatiDB import errors as dbError
 
-from importMail import ImportMailMBox
+from importMail import ImportMail_MBox
 import errors as storeError
 import api
+from utils import RepairDialogLinking
 
 from libs.plainText import plaintext
 import textwrap
@@ -48,7 +49,7 @@ class MyEnv(object):
       if not os.path.isfile(path):
          raise ValueError('File not exists')
       self.store.userIsExist(user,needException=True)
-      importer=ImportMailMBox(path, skip)
+      importer=ImportMail_MBox(path, skip)
       msg=None
       if self._istty:
          print
@@ -93,6 +94,9 @@ class MyEnv(object):
          print msgObj.raw
          print '='*30
          print
+
+   def repairDialogs(self, user):
+      RepairDialogLinking(self.store).run(user)
 
    def show(self, branch=None, limit=None):
       showDB(self.store.db, branch=branch, limit=limit)
@@ -144,8 +148,27 @@ class MyEnv(object):
             if len(lines)>=1+min_msgs*3:
                print '\n'.join(lines)
 
+   def find_broken_msgs_without_dialogs(self, user):
+      """ Изза ошибки в коде `utils.RepairDialogLinking` у некоторых сообщений пропадал линк на диалог. Данный тест искал такие сломанные сообщения."""
+      i1=i2=0
+      tArr=[]
+      g=self.store.db.iterBranch((self.store.userId(user), 'node_date'), strictMode=True, recursive=True, treeMode=True, safeMode=False, calcProperties=False, skipLinkChecking=True)
+      for ids, (props, l) in g:
+         if len(ids)<4: continue
+         if ids[3]!='node_msg': g.send(False)  # skip not-msgs nodes
+         if len(ids)>5: g.send(False)  # skip branch inside msgs
+         if len(ids)==5:
+            try:
+               self.store.dialogFind_byMsgIds(ids, strictMode=True, asThread=True)
+               i1+=1
+            except Exception:
+               tArr.append(ids)
+               i2+=1
+         print console.color.clearLast+'%i  %i'%(i1, i2)
+      print tArr
+
 if __name__ == '__main__':
-   # importer=ImportMailMBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
+   # importer=ImportMail_MBox('/home/byaka/Загрузки/gmail_exported/all.mbox')
    # tMap=set()
    # i1=i2=i3=i4=0
    # print
@@ -181,6 +204,8 @@ if __name__ == '__main__':
    # print console.color.clearLast, i1, i2, i3, i4, sys.exit()
 
    o=MyEnv()
+
+   o.repairDialogs('John Smith')
 
    # o.test_filter({'or':[
    #    {'key':'from', 'value':'mail@ajon.ru', 'match':'=='},

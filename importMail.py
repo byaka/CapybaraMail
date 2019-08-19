@@ -3,7 +3,7 @@ from functionsex import *
 
 import mailparserEx
 
-class ImportMailMBox(object):
+class ImportMail_MBox(object):
    _headers=('date', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'references', 'reply-to', 'archived-at', 'sender', 'x-gmail-labels', 'subject', 'delivered-to', 'return-path')
 
    def __init__(self, path, skip=0):
@@ -25,20 +25,26 @@ class ImportMailMBox(object):
          for s in data.split(',')
       )
 
-   def _procMsg(self, buffer):
-      if not buffer: return None
-      s=''.join(buffer)
-      # fileWrite('/home/byaka/Загрузки/gmail_exported/test.txt', s)
-      msg=mailparserEx.parse_from_string(s)
+   def _prepMsgObj(self, raw):
+      return mailparserEx.parse_from_string(raw)
+
+   def _parseHeaders(self, msgObj):
       headers={}
       for k in self._headers:
-         headers[k]=getattr(msg, k.replace('-', '_'))
+         headers[k]=getattr(msgObj, k.replace('-', '_'))
          if headers[k] and k in self._headers_preprocess:
             m=self._headers_preprocess[k]
             headers[k]=m(headers[k])
-      body=msg.body
-      attachments=tuple(msg.attachments)
-      return msg, headers, body, attachments
+      return headers
+
+   def _procMsg(self, buffer):
+      if not buffer: return None
+      raw=''.join(buffer)
+      msgObj=self._prepMsgObj(raw)
+      headers=self._parseHeaders(msgObj)
+      body=msgObj.body
+      attachments=tuple(msgObj.attachments)
+      return msgObj, headers, body, attachments
 
    def __iter__(self):
       i=0
