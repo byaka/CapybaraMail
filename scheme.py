@@ -2,11 +2,21 @@
 
 from functionsex import *
 
-__all__=['SCHEME']
+__all__=['DB_SCHEME', 'DB_SETTINGS']
 
-#~ для корректной работы требуется установка флага `linkedChilds_inheritNSFlags=True`
+DB_SETTINGS={
+   'store_flushOnChange':False,
+   'ns_checkIndexOnConnect':False,
+   'dataMerge_ex':True,
+   'dataMerge_deep':False,
+   'linkedChilds_default_do':False,
+   'linkedChilds_inheritNSFlags':True,
+   'ns_default_allowLocalAutoIncrement':False,
+   'columns_default_allowUnknown':False,
+   'columns_default_allowMissed':False,
+}
 
-SCHEME=[
+DB_SCHEME=[
 #  (Name, (Parents, Childs, Columns, AllowOnlyIndexed[True], AllowOnlyNumerable[False], localAutoIncrement[fromSetts], linkChilds[fromSetts])) # noqa
 
    ('user', (None, ['node_date', 'node_email', 'node_label', 'node_self', 'node_dialog', 'node_problem'], {

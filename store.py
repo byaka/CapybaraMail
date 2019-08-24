@@ -3,7 +3,7 @@ from functionsex import *
 from VombatiDB import VombatiDB
 from VombatiDB import errors as dbError
 
-from scheme import SCHEME
+from scheme import DB_SCHEME, DB_SETTINGS
 from errors import *
 from utils import isInt
 
@@ -148,18 +148,10 @@ class StoreDB(StoreBase):
       super(StoreDB, self)._start(**kwargs)
 
    def _configureDB(self, reinitNamespaces):
-      self.db.settings.store_flushOnChange=False
-      self.db.settings.ns_checkIndexOnConnect=False
-      self.db.settings.dataMerge_ex=True
-      self.db.settings.dataMerge_deep=False
-      self.db.settings.linkedChilds_default_do=False
-      self.db.settings.linkedChilds_inheritNSFlags=True
-      self.db.settings.ns_default_allowLocalAutoIncrement=False
-      self.db.settings.columns_default_allowUnknown=False
-      self.db.settings.columns_default_allowMissed=False
+      for k,v in DB_SETTINGS.iteritems(): self.db.settings[k]=v
       self.db.connect()
       if reinitNamespaces:
-         self.db.configureNS(SCHEME, andClear=True)
+         self.db.configureNS(DB_SCHEME, andClear=True)
 
    def __makeAuthMap(self):
       self.__authMap=dict(self.db.query(
