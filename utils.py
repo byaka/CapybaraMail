@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import sys, traceback
+import sys
 
 from importMail import ImportMail_MBox
 
@@ -147,7 +147,7 @@ class RepairDialogLinking(object):
       if IS_TTY: print
       for idsCur, (propsCur, lCur) in self.store.db.iterBacklinks(ids, recursive=False, allowContextSwitch=False):
          msgIds=idsCur[:-1]
-         msgId=idsCur[-2]
+         msgId=msgIds[-1]
          dateId=idsCur[-4]
          idsFrom=self.store.dialogFind_byMsg(userId, msgId, date=dateId, asThread=True)
          oldDialog=(userId, 'node_dialog', self.store.dialogId(self.store._thread2dialog(idsFrom, onlyDialog=True)))
