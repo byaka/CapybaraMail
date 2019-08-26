@@ -3,7 +3,6 @@ from functionsex import *
 
 from VombatiDB import Workspace
 
-import errors as storeError
 import api
 from apiWrapper import ApiWrapperJSONRPC
 

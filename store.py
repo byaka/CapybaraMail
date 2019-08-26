@@ -222,12 +222,28 @@ class StoreDB(StoreBase):
       assert len(ids)>2 and ids[1]=='node_label'
       return '/'.join(self.ids2human(s) for s in ids[2:])
 
-   def _thread2dialog(self, ids, onlyDialog=False):
+   def dialogIds2human(self, ids):
+      assert isinstance(ids, tuple)
+      assert len(ids)>3 and ids[1]=='node_date' and ids[3]=='node_dialog'
+      _date=self.db._parseId2NS(ids[2], needNSO=False)[1][1:]
+      _dialog=self.db._parseId2NS(ids[4], needNSO=False)[1][1:]
+      return '%s:%s'%(_date, _dialog)
+
+   def _idsConv_thread2dialog(self, ids, onlyDialog=False):
       for i, s in enumerate(ids):
          ns, nsi=self.db._parseId2NS(s, needNSO=False)
          if ns=='dialog':
             return nsi[1:] if onlyDialog else ids[:i+1]
       return None
+
+   def _idsConv_dialog2date(self, ids, onlyRaw=False, onlyDate=False):
+      assert isinstance(ids, tuple)
+      assert len(ids)>3 and ids[1]=='node_date' and ids[3]=='node_dialog'
+      ns, nsi=self.db._parseId2NS(ids[2], needNSO=False)
+      assert ns=='date'
+      if onlyRaw:
+         return datetime.datetime.strptime(nsi[1:], '%Y%m%d')
+      return nsi[1:] if onlyDate else ids[:3]
 
    def authMap(self):
       if self.__authMap is None:
@@ -540,10 +556,10 @@ class StoreDB(StoreBase):
       for ids, (props, l) in g:
          yield (ids, props) if returnProps else ids
 
-   def msgGet(self, user, msg, date=None, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True):
+   def msgGet(self, user, msg, date=None, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True, andDialogId=True):
       ids=self.msgFind_byMsg(user, msg, date, strictMode=strictMode)
       if not ids: return None
-      return self.msgGet_byIds(ids, strictMode=strictMode, onlyPublic=onlyPublic, resolveAttachments=resolveAttachments, andLabels=andLabels)
+      return self.msgGet_byIds(ids, strictMode=strictMode, onlyPublic=onlyPublic, resolveAttachments=resolveAttachments, andLabels=andLabels, andDialogId=andDialogId)
 
    def msgFind_byMsg(self, user, msg, date=None, strictMode=False):
       #? можно ускорить для несуществующих в индексе добавив отдельный фильтр блума
@@ -567,7 +583,7 @@ class StoreDB(StoreBase):
             raise dbError.NotExistError(ids)
       return targetIds
 
-   def msgGet_byIds(self, ids, props=None, strictMode=True, onlyPublic=False, resolveAttachments=False, andLabels=False, wrapMagic=True):
+   def msgGet_byIds(self, ids, props=None, strictMode=True, onlyPublic=False, resolveAttachments=False, andLabels=False, andDialogId=False, wrapMagic=True):
       if andLabels:
          # получение данных сработает и по ссылке, но для лэйблов нужна прямая адресация
          ids=self.db.resolveLink(ids)
@@ -578,6 +594,8 @@ class StoreDB(StoreBase):
       res=self.prepDataForReturn(res, filterPrivateData=onlyPublic, wrapMagic=wrapMagic)
       if resolveAttachments:
          pass  #! fix
+      if andDialogId:
+         res['dialogId']=self.dialogIds2human(self.dialogFind_byMsgIds(ids, asThread=False, strictMode=True))
       if andLabels:
          #! после VombatiDB#99 можно будет передавать `branch` через аргумент `env` и таким образом кешировать запрос
          res['labels']=tuple(self.db.query(
@@ -777,6 +795,7 @@ class StoreDB_dialogFinderEx(StoreDB):
       old=None
       step=None
       l=len(dates)
+      firstDate=None
       for i, s in enumerate(dates):
          if not s:
             raise NotImplementedError  #! fix
@@ -811,19 +830,32 @@ class StoreDB_dialogFinderEx(StoreDB):
             d=_today if step>0 else _min
          else:
             raise IncorrectInputError('Incorrect date value `%s`: %s'%(s, type(s)))
+         if firstDate is None: firstDate=d
          #
          if step is None:
             cmd=yield (d, _dateId(d))
-            if cmd is True:
-               if i+1>=l:
-                  yield False
-               elif isInt(dates[i+1]):
-                  assert dates[i+1]
-                  old=d
-                  assert old and step is None, (dates, old, step, i)
-                  yield ((old+_delta(days=dates[i+1])).strftime('%Y%m%d'),)+dates[i+1:]
-               else:
-                  yield dates[i+1:]
+            while cmd:
+               args=()
+               if cmd and isinstance(cmd, tuple):
+                  cmd, args=cmd[0], cmd[1:]
+               if not cmd: break
+               elif cmd is self.dialogFindEx.MSG_PACK:
+                  if i+1>=l:
+                     cmd=yield False
+                  elif isInt(dates[i+1]):
+                     assert dates[i+1]
+                     old=d
+                     assert old and step is None, (dates, old, step, i)
+                     cmd=yield ((old+_delta(days=dates[i+1])).strftime('%Y%m%d'),)+dates[i+1:]
+                  else:
+                     cmd=yield dates[i+1:]
+               elif cmd is self.dialogFindEx.MSG_CHECK_DATE:
+                  #! проблемка
+                  #? отчасти можно решить это если для диапозонов не генерить первое вхождение сразу, а включать сразу перебор. однако это не решает проблему для не-диапозонов, кроме того текущий вариант для диапозонов предполагает, что диапозоны идут строго в одном порядке, нет отдельных дат и не меняется направление
+                  #? комплексно эту проблему можно решить только полным анализом генератора
+                  #? поскольку пока эта фича нужна только для апи при отбрасывании дублей диалогов - можно просто добавить на стороне апи доп режим черного списка специально для дат
+                  # cmd=yield True
+                  raise NotImplementedError
          elif old==d:
             raise IncorrectInputError('Passed dateStart and dateEnd must not equal')
          elif (old>d)==step>0:
@@ -834,11 +866,25 @@ class StoreDB_dialogFinderEx(StoreDB):
             while (d<=end if step>0 else d>=end):
                cmd=yield (d, _dateId(d))
                d+=delta
-               if cmd is True:
-                  if (d>end if step>0 else d<end):
-                     yield dates[i+1:] or False  # if we out-of-range, slice just returns empty tuple
+               while cmd:
+                  args=()
+                  if cmd and isinstance(cmd, tuple):
+                     cmd, args=cmd[0], cmd[1:]
+                  if not cmd: break
+                  elif cmd is self.dialogFindEx.MSG_PACK:
+                     if (d>end if step>0 else d<end):
+                        cmd=yield dates[i+1:] or False  # if we out-of-range, slice just returns empty tuple
+                     else:
+                        cmd=yield (d.strftime('%Y%m%d'), step, s)+dates[i+1:]  # if we out-of-range, slice just returns empty tuple
+                  elif cmd is self.dialogFindEx.MSG_CHECK_DATE:
+                     val=args[0]
+                     if isinstance(val, datetime.datetime): val=val.date()
+                     elif isinstance(val, datetime.date): pass
+                     else:
+                        raise IncorrectInputError('Incorrect date value `%s`: %s'%(val, type(val)))
+                     cmd=yield (val>=firstDate) if step>0 else (val<=firstDate)
                   else:
-                     yield (d.strftime('%Y%m%d'), step, s)+dates[i+1:]  # if we out-of-range, slice just returns empty tuple
+                     raise IncorrectInputError('Incorrect command')
             step=None
          old=d
 
@@ -847,3 +893,6 @@ class StoreDB_dialogFinderEx(StoreDB):
       userId=self.userId(user)
       q=self.__queryCompile(userId, query)
       return self.db.query(q=q, env={'DATES':dateIterator})
+
+   dialogFindEx.MSG_PACK=object()
+   dialogFindEx.MSG_CHECK_DATE=object()

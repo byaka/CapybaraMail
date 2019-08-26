@@ -150,7 +150,7 @@ class RepairDialogLinking(object):
          msgId=msgIds[-1]
          dateId=idsCur[-4]
          idsFrom=self.store.dialogFind_byMsg(userId, msgId, date=dateId, asThread=True)
-         oldDialog=(userId, 'node_dialog', self.store.dialogId(self.store._thread2dialog(idsFrom, onlyDialog=True)))
+         oldDialog=(userId, 'node_dialog', self.store.dialogId(self.store._idsConv_thread2dialog(idsFrom, onlyDialog=True)))
          data=self.store.msgGet(userId, msgId, date=dateId, strictMode=True, onlyPublic=False, resolveAttachments=False, andLabels=False)
          raw=self.store._fileGet('raw', data['_raw'])
          headers=parser._parseHeaders(parser._prepMsgObj(raw))

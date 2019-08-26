@@ -179,7 +179,7 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, returnNextDates=True):
+   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, checkDialogDate=True, blacklist=None, returnNextDates=True, returnProcessed=False):
       """
       Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
@@ -203,7 +203,10 @@ class ApiFilter(ApiBase):
       :param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации (defaults to True).
       :param bool returnFull: Позволяет получить сообщения целиком, а не только их идентификаторы (defaults to False).
       :param bool onlyCount: Вместо самих диалогов (сообщений) возвращает количество (defaults to False).
+      :param bool checkDialogDate: Для режима обработки диалогов (`asDialogs==True`) включает проверку, попадает ли диалог в граници дат. Использование данного флага позволяет избежать дублирования диалогов в выдаче между запросами, в ситуации когда сообщения за разные даты находятся в одном диалоге (defaults to True).
+      :param tuple|list|none blacklist: Сюда можно передать идентификаторы сообщений или диалогов (в зависимости от флага `asDialogs`), которые будут пропущены при обработке.
       :param bool returnNextDates: Добавляет в результаты модифицированный `dates`, в котором остались только необработанные даты из запрошенных. Работает с любыми комбинациями дат (defaults to True).
+      :param bool returnProcessed: Добавляет в результат список идентификаторов обработанных обьектов плюс значения из `blacklist` если были переданы. Это позволяет избавляться от дубликатов обьектов между разными запросами (defaults to False).
       :return list:
 
       :note:
@@ -250,9 +253,11 @@ class ApiFilter(ApiBase):
       cD=cR=0
       resData=[]
       resTargets=[] if _needTargets else None
-      dialog_map=set() if asDialogs else None
+      blacklistMap=set(blacklist) if blacklist else set()
+      dialogMap={}
       g=None
-      for date, data, g in self.store.dialogFindEx(userId, query, dates):
+      dialogFindEx=self.store.dialogFindEx
+      for date, data, g in dialogFindEx(userId, query, dates):
          dateId=self.store.dateId(date)
          if asDialogs:
             cM=0 if returnFull else len(data)
@@ -260,17 +265,23 @@ class ApiFilter(ApiBase):
             for msgIds in msgs:
                targets.append(self.store.ids2human(msgIds))
                dialogIds=self.store.dialogFind_byMsgIds(msgIds, asThread=False)
-               dialog=(dialogIds[-3], dialogIds[-1])
-               if dialog in dialog_map: continue
-               dialog_map.add(dialog)
-               #? а может стоит возвращать айди диалога тоже?
+               dialogId=self.store.dialogIds2human(dialogIds)
+               if dialogId in blacklistMap: continue
+               if checkDialogDate:
+                  if dialogId not in dialogMap:
+                     d=self.store._idsConv_dialog2date(dialogIds, onlyRaw=True)
+                     dialogMap[dialogId]=g.send((dialogFindEx.MSG_CHECK_DATE, d))
+                  if not dialogMap[dialogId]: continue
+               blacklistMap.add(dialogId)
                if returnFull and not onlyCount:
-                  dialog=tuple(
-                     self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True, wrapMagic=False)
-                     for ids, props
-                     in self.store.dialogGet_byIds(dialogIds, returnProps=True)
-                  )
+                  dialog=[]
+                  for ids, props in self.store.dialogGet_byIds(dialogIds, returnProps=True):
+                     o=self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True, andDialogId=False, wrapMagic=False)
+                     o['dialogId']=dialogId
+                     dialog.append(o)
+                  dialog.sort(key=lambda o: o['timestamp'])
                else:
+                  #! добавить поддержку `blacklistMap`
                   dialog=tuple(self.store.dialogGet_byIds(dialogIds, returnProps=False))
                cM+=len(dialog)
                data.append(dialog)
@@ -279,8 +290,10 @@ class ApiFilter(ApiBase):
          else:
             cM=len(data)
             if returnFull and not onlyCount:
+               #! добавить поддержку `blacklistMap`
                data=tuple(self.store.msgGet(userId, msg, date=dateId) for msg in data)
             else:
+               #! добавить поддержку `blacklistMap`
                data=tuple(data)
          resData.append((date, len(data) if onlyCount else data))
          #
@@ -290,5 +303,7 @@ class ApiFilter(ApiBase):
       r=(resData, resTargets) if _needTargets else (resData,)
       if returnNextDates:
          # extracting date-generator for next search
-         r+=(g.send(True),) if g else (False,)
+         r+=(g.send(dialogFindEx.MSG_PACK),) if g else (False,)
+      if returnProcessed:
+         r+=(blacklistMap,)
       return r if len(r)>1 else r[0]
