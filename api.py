@@ -179,16 +179,14 @@ class ApiLabel(ApiBase):
 
 class ApiFilter(ApiBase):
 
-   def filterMessages(self, login, dates=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, checkDialogDate=True, blacklist=None, returnNextDates=True, returnProcessed=False):
+   def filterMessages(self, login, dateIterator=None, query=None, limitDates=10, limitResults=10, asDialogs=True, returnFull=False, onlyCount=False, checkDialogDate=True, blacklist=None, returnDateIterator=True, returnProcessed=False):
       """
       Фильтрует сообщения по заданным критериям. Результаты группируются по датам.
 
       :param str login: Login of account.
-      :param tuple|str|date|none dates:
-         Дата или даты, за которые ведется поиск.
-         Для передачи промежутков дат используйте синтаксис `(date1, 1, date2)`, а для обратного порядка `(date1, -1, date2)`.
-         Также возможно использовать формат `(date1, -1, True)` - это эквиваленто перебору дат начиная с указанной и вплоть до самой старой в базе (при положительном шаге в качестве даты-конца будет использована сама новая дата в базе). Второй аргумент в промежутках задает направление перебора и шаг.
-         Допускается использовать одновременно и промежутки дат и обычное перечисление.
+      :param tuple|none dateIterator:
+         Промежутки дат, за который ведется поиск. Каждый промежуток состоит из трех элементов - дата начала, шаг и дата конца.
+         Также возможно использовать формат `(date1, -1, True)` - это эквиваленто перебору дат начиная с указанной и вплоть до самой старой в базе (при положительном шаге в качестве даты-конца будет использована сама новая дата в базе).
          Дата задается либо типом `date`, либо строкой в формате `yyyymmdd`, либо строкой-константой `today`, `yesterday`, `today+1`, `today-4` (и так далее).
          Значение `None` эквивалетно `('today', -1, True)` (defaults to None).
       :param dict query:
@@ -203,9 +201,9 @@ class ApiFilter(ApiBase):
       :param bool asDialogs: Позволяет получать полностью диалоги вместо отдельных сообщений. При этом в результатах появится дополнительный массив с идентификаторами сообщений, непосредственно попавших под условия фильтрации (defaults to True).
       :param bool returnFull: Позволяет получить сообщения целиком, а не только их идентификаторы (defaults to False).
       :param bool onlyCount: Вместо самих диалогов (сообщений) возвращает количество (defaults to False).
-      :param bool checkDialogDate: Для режима обработки диалогов (`asDialogs==True`) включает проверку, попадает ли диалог в граници дат. Использование данного флага позволяет избежать дублирования диалогов в выдаче между запросами, в ситуации когда сообщения за разные даты находятся в одном диалоге (defaults to True).
+      :param bool checkDialogDate: Для режима обработки диалогов (`asDialogs==True`) включает проверку, попадает ли диалог в граници дат. Датой диалога всегда считается дата последнего сообщения в нем. Использование данного флага позволяет избежать дублирования диалогов в выдаче между запросами, в ситуации когда сообщения за разные даты находятся в одном диалоге (defaults to True).
       :param tuple|list|none blacklist: Сюда можно передать идентификаторы сообщений или диалогов (в зависимости от флага `asDialogs`), которые будут пропущены при обработке.
-      :param bool returnNextDates: Добавляет в результаты модифицированный `dates`, в котором остались только необработанные даты из запрошенных. Работает с любыми комбинациями дат (defaults to True).
+      :param bool returnDateIterator: Добавляет в результаты модифицированный `dateIterator`, в котором остались только необработанные даты из запрошенных. Работает с любыми комбинациями дат (defaults to True).
       :param bool returnProcessed: Добавляет в результат список идентификаторов обработанных обьектов плюс значения из `blacklist` если были переданы. Это позволяет избавляться от дубликатов обьектов между разными запросами (defaults to False).
       :return list:
 
@@ -246,45 +244,48 @@ class ApiFilter(ApiBase):
          msg.from == 'from4' or
          msg.from == 'from5'
       """
-      if dates is None:
-         dates=('today', -1, True)
+      #? удаление дубликатов диалогов через checkDialogDate отлично подойдет для всех случаев кроме режима поиска по конкретной дате. однако поскольку dateIterator больше не принимает отдельные даты - эта проблема актуальна только для режимов поиска когда явно переданы граници дат для поиска
+      if dateIterator is None:
+         dateIterator=('today', -1, True)
       _needTargets=asDialogs and not onlyCount
       userId=self.store.userId(login)
       cD=cR=0
       resData=[]
       resTargets=[] if _needTargets else None
       blacklistMap=set(blacklist) if blacklist else set()
-      dialogMap={}
+      dialogInBounds={}
       g=None
       dialogFindEx=self.store.dialogFindEx
-      for date, data, g in dialogFindEx(userId, query, dates):
+      for date, data, g in dialogFindEx(userId, query, dateIterator):
          dateId=self.store.dateId(date)
          if asDialogs:
             cM=0 if returnFull else len(data)
             msgs, targets, data=data, [], []
             for msgIds in msgs:
-               targets.append(self.store.ids2human(msgIds))
                dialogIds=self.store.dialogFind_byMsgIds(msgIds, asThread=False)
                dialogId=self.store.dialogIds2human(dialogIds)
                if dialogId in blacklistMap: continue
-               if checkDialogDate:
-                  if dialogId not in dialogMap:
-                     d=self.store._idsConv_dialog2date(dialogIds, onlyRaw=True)
-                     dialogMap[dialogId]=g.send((dialogFindEx.MSG_CHECK_DATE, d))
-                  if not dialogMap[dialogId]: continue
                blacklistMap.add(dialogId)
                if returnFull and not onlyCount:
                   dialog=[]
-                  for ids, props in self.store.dialogGet_byIds(dialogIds, returnProps=True):
-                     o=self.store.msgGet_byIds(ids, props, strictMode=False, onlyPublic=True, resolveAttachments=True, andLabels=True, andDialogId=False, wrapMagic=False)
+                  gDialog=self.store.dialogGet_byIds(dialogIds, returnProps=True, needSortByDate=True)
+                  if checkDialogDate:
+                     if dialogId not in dialogInBounds:
+                        gDialog=gDialog if isinstance(gDialog, (list, tuple)) else tuple(gDialog)
+                        o=self.store.msgGet_byIds(*gDialog[-1], wrapMagic=False)
+                        dialogInBounds[dialogId]=g.send((dialogFindEx.CMD_CHECK_DATE, o['timestamp']))
+                     if not dialogInBounds[dialogId]: continue
+                  for ids, props in gDialog:
+                     o=self.store.msgGet_byIds(ids, props, strictMode=True, onlyPublic=True, resolveAttachments=True, andLabels=True, andDialogId=False, wrapMagic=False)
                      o['dialogId']=dialogId
                      dialog.append(o)
-                  dialog.sort(key=lambda o: o['timestamp'])
                else:
                   #! добавить поддержку `blacklistMap`
                   dialog=tuple(self.store.dialogGet_byIds(dialogIds, returnProps=False))
+               if not dialog: continue
                cM+=len(dialog)
                data.append(dialog)
+               targets.append(self.store.ids2human(msgIds))
             if _needTargets:
                resTargets.extend(targets)
          else:
@@ -301,9 +302,9 @@ class ApiFilter(ApiBase):
          cR+=cM
          if cD>limitDates or cR>limitResults: break
       r=(resData, resTargets) if _needTargets else (resData,)
-      if returnNextDates:
+      if returnDateIterator:
          # extracting date-generator for next search
-         r+=(g.send(dialogFindEx.MSG_PACK),) if g else (False,)
+         r+=(g.send(dialogFindEx.CMD_PACK_DATES),) if g else (False,)
       if returnProcessed:
          r+=(blacklistMap,)
       return r if len(r)>1 else r[0]

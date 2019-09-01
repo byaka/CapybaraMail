@@ -549,10 +549,14 @@ class StoreDB(StoreBase):
             else:
                raise dbError.NotExistError(ids)
       #
-      return self.dialogGet_byIds(ids, returnProps=returnProps)
+      return self.dialogGet_byIds(ids, returnProps=returnProps, needSortByDate=True)
 
-   def dialogGet_byIds(self, ids, props=None, returnProps=False):
+   def dialogGet_byIds(self, ids, props=None, returnProps=False, needSortByDate=False):
       g=self.db.iterBranch(ids, recursive=True, treeMode=True, safeMode=False, calcProperties=returnProps, skipLinkChecking=True, allowContextSwitch=False)
+      if needSortByDate:
+         g=sorted(g,
+            #! такая сортировка требует обращения к хранилищу данных, которое как правило медленное. при этом типичный сценарий использования - это получение диалога для дальнейшего запроса сообщений из него - что по сути вызовет двойное обращение к хранилищу на каждый обьект.
+            key=lambda s: self.db.get(*s, returnRaw=True, strictMode=True)['timestamp'])
       for ids, (props, l) in g:
          yield (ids, props) if returnProps else ids
 
@@ -787,106 +791,90 @@ class StoreDB_dialogFinderEx(StoreDB):
       _ptrnDate=datetime.date
       _ptrnDatetime=datetime.datetime
       _fromStr=datetime.datetime.strptime
+      _fromInt=datetime.date.fromtimestamp
       _today=datetime.date.today()
       _min=_ptrnDate(1970, 1, 1)  #! нужно получать минимальную дату в базе и использовать это
       _delta=datetime.timedelta
       _yesterday=_today-_delta(days=1)
       _dateId=self.dateId
-      old=None
-      step=None
-      l=len(dates)
-      firstDate=None
-      for i, s in enumerate(dates):
-         if not s:
+      _dateFrom=_dateTo=_dateStep=None
+      _dateMin=_dateMax=None
+      l=len(dates)-1
+      for i, val in enumerate(dates):
+         if not val:
             raise NotImplementedError  #! fix
-         elif isinstance(s, _ptrnStr):
-            s=s.lower()
-            if s=='today':
-               d=_today
-            elif s=='yesterday':
-               d=_yesterday
-            elif s.startswith('today'):
-               if '-' in s:
+         elif isinstance(val, _ptrnStr):
+            val=val.lower()
+            if val=='today':
+               val=_today
+            elif val=='yesterday':
+               val=_yesterday
+            elif val.startswith('today'):
+               if '-' in val:
                   ss, m='-', -1
-               elif '+' in s:
+               elif '+' in val:
                   ss, m='+', 1
                else:
                   raise ValueError  #! fix
-               s=m*int(s.split(ss, 1)[1])
-               d=_today+_delta(days=s)
+               val=m*int(val.split(ss, 1)[1])
+               val=_today+_delta(days=val)
             else:
-               d=_fromStr(s, '%Y%m%d').date()
-         elif isInt(s):
-            assert s
-            assert old and step is None
-            step=s
-            continue
-         elif isinstance(s, _ptrnDate):
-            d=s
-         elif isinstance(s, _ptrnDatetime):
-            d=s.date()
-         elif s is True:
-            assert step is not None
-            d=_today if step>0 else _min
+               val=_fromStr(val, '%Y%m%d').date()  #? не самый удачный паттерн, не помню откуда он взялся
+         elif isInt(val):
+            assert val
+            assert _dateFrom and _dateStep is None
+         elif isinstance(val, _ptrnDate):
+            pass
+         elif isinstance(val, _ptrnDatetime):
+            val=val.date()
+         elif val is True:
+            assert _dateStep is not None
+            val=_today if _dateStep>0 else _min
          else:
-            raise IncorrectInputError('Incorrect date value `%s`: %s'%(s, type(s)))
-         if firstDate is None: firstDate=d
+            raise IncorrectInputError('Incorrect value for date-iterator: `%r`(%s)'%(val, type(val)))
          #
-         if step is None:
+         if _dateFrom is None: _dateFrom=val
+         elif _dateStep is None: _dateStep=val
+         elif _dateTo is None: _dateTo=val
+         else:
+            raise RuntimeError('WTF in date-iterator')
+         if _dateFrom is None or _dateStep is None or _dateTo is None:
+            if i<l: continue
+            raise IncorrectInputError('Missed some values for date-iterator')
+         if _dateFrom==_dateTo:
+            raise IncorrectInputError('Passed date-from and date-to must not equal')
+         if (_dateFrom>_dateTo)==_dateStep>0:
+            raise IncorrectInputError('Incorrect date-from and date-to')
+         #
+         _dateMin=min(_dateMin, _dateFrom, _dateTo) if _dateMin is not None else min(_dateFrom, _dateTo)
+         _dateMax=max(_dateMax, _dateFrom, _dateTo) if _dateMax is not None else max(_dateFrom, _dateTo)
+         delta=_delta(days=_dateStep)
+         d=_dateFrom
+         while (d<=_dateTo if _dateStep>0 else d>=_dateTo):
             cmd=yield (d, _dateId(d))
+            d+=delta
             while cmd:
                args=()
                if cmd and isinstance(cmd, tuple):
                   cmd, args=cmd[0], cmd[1:]
                if not cmd: break
-               elif cmd is self.dialogFindEx.MSG_PACK:
-                  if i+1>=l:
-                     cmd=yield False
-                  elif isInt(dates[i+1]):
-                     assert dates[i+1]
-                     old=d
-                     assert old and step is None, (dates, old, step, i)
-                     cmd=yield ((old+_delta(days=dates[i+1])).strftime('%Y%m%d'),)+dates[i+1:]
+               elif cmd is self.dialogFindEx.CMD_PACK_DATES:
+                  if (d>_dateTo if _dateStep>0 else d<_dateTo):
+                     cmd=yield dates[i+1:] or False  # if we out-of-range, slice just returns empty tuple
                   else:
-                     cmd=yield dates[i+1:]
-               elif cmd is self.dialogFindEx.MSG_CHECK_DATE:
-                  #! проблемка
-                  #? отчасти можно решить это если для диапозонов не генерить первое вхождение сразу, а включать сразу перебор. однако это не решает проблему для не-диапозонов, кроме того текущий вариант для диапозонов предполагает, что диапозоны идут строго в одном порядке, нет отдельных дат и не меняется направление
-                  #? комплексно эту проблему можно решить только полным анализом генератора
-                  #? поскольку пока эта фича нужна только для апи при отбрасывании дублей диалогов - можно просто добавить на стороне апи доп режим черного списка специально для дат
-                  # cmd=yield True
-                  raise NotImplementedError
-         elif old==d:
-            raise IncorrectInputError('Passed dateStart and dateEnd must not equal')
-         elif (old>d)==step>0:
-            raise IncorrectInputError('Incorrect dateStart and dateEnd')
-         else:
-            delta=_delta(days=step)
-            end, d=d, old+delta
-            while (d<=end if step>0 else d>=end):
-               cmd=yield (d, _dateId(d))
-               d+=delta
-               while cmd:
-                  args=()
-                  if cmd and isinstance(cmd, tuple):
-                     cmd, args=cmd[0], cmd[1:]
-                  if not cmd: break
-                  elif cmd is self.dialogFindEx.MSG_PACK:
-                     if (d>end if step>0 else d<end):
-                        cmd=yield dates[i+1:] or False  # if we out-of-range, slice just returns empty tuple
-                     else:
-                        cmd=yield (d.strftime('%Y%m%d'), step, s)+dates[i+1:]  # if we out-of-range, slice just returns empty tuple
-                  elif cmd is self.dialogFindEx.MSG_CHECK_DATE:
-                     val=args[0]
-                     if isinstance(val, datetime.datetime): val=val.date()
-                     elif isinstance(val, datetime.date): pass
-                     else:
-                        raise IncorrectInputError('Incorrect date value `%s`: %s'%(val, type(val)))
-                     cmd=yield (val>=firstDate) if step>0 else (val<=firstDate)
+                     cmd=yield (d.strftime('%Y%m%d'), _dateStep, _dateTo.strftime('%Y%m%d'))+dates[i+1:]  # if we out-of-range, slice just returns empty tuple
+               elif cmd is self.dialogFindEx.CMD_CHECK_DATE:
+                  #! по хорошему здесь нужно быстро обработать весь остаток `dates` для поиска границ
+                  _val=args[0]
+                  if isInt(_val): _val=_fromInt(_val)
+                  elif isinstance(_val, _ptrnDatetime): _val=_val.date()
+                  elif isinstance(_val, _ptrnDate): pass
                   else:
-                     raise IncorrectInputError('Incorrect command')
-            step=None
-         old=d
+                     raise IncorrectInputError('Incorrect date value `%s`: %s'%(_val, type(_val)))
+                  cmd=yield (_val>=_dateMin and _val<=_dateMax)
+               else:
+                  raise IncorrectInputError('Incorrect command')
+         _dateFrom=_dateTo=_dateStep=None
 
    def dialogFindEx(self, user, query, dates):
       dateIterator=self.__queryDateIter(dates)
@@ -894,5 +882,5 @@ class StoreDB_dialogFinderEx(StoreDB):
       q=self.__queryCompile(userId, query)
       return self.db.query(q=q, env={'DATES':dateIterator})
 
-   dialogFindEx.MSG_PACK=object()
-   dialogFindEx.MSG_CHECK_DATE=object()
+   dialogFindEx.CMD_PACK_DATES=object()
+   dialogFindEx.CMD_CHECK_DATE=object()
